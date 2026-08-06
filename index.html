@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusTrack - ポモドーロ勉強時間管理アプリ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* 発光アニメーション */
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 15px rgba(245, 158, 11, 0.6), 0 0 30px rgba(245, 158, 11, 0.3);
+                border-color: #f59e0b;
+                transform: scale(1.03);
+            }
+            50% {
+                box-shadow: 0 0 25px rgba(245, 158, 11, 0.9), 0 0 50px rgba(245, 158, 11, 0.5);
+                border-color: #fbbf24;
+                transform: scale(1.08);
+            }
+        }
+        .confirm-glow {
+            animation: pulse-glow 1.2s infinite ease-in-out;
+            background: linear-gradient(135deg, #b45309, #d97706) !important;
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white">
+
+<!-- ヘッダーエリア -->
+<header class="bg-slate-800/90 border-b border-slate-700/80 sticky top-0 z-30 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <i class="fa-solid fa-graduation-cap text-xl text-white"></i>
+            </div>
+            <div>
+                <h1 class="text-base sm:text-lg font-extrabold bg-gradient-to-r from-indigo-400 to-purple-300 bg-clip-text text-transparent">
+                    FocusTrack
+                </h1>
+                <p class="text-[10px] text-slate-400 hidden sm:block">ポモドーロ & ゲーミフィケーション勉強管理</p>
+            </div>
+        </div>
+
+        <!-- 今日の概要＆リアルタイム時計 -->
+        <div class="flex items-center gap-2 sm:gap-4 bg-slate-950/60 px-3 py-1.5 rounded-xl border border-slate-800">
+            <div class="text-right">
+                <span class="text-[10px] text-slate-400 block">現在時刻</span>
+                <span id="headerClock" class="font-bold text-amber-400 text-xs sm:text-sm font-mono">00:00:00</span>
+            </div>
+            <div class="h-6 w-px bg-slate-800"></div>
+            <div class="text-right">
+                <span class="text-[10px] text-slate-400 block">本日の学習</span>
+                <span id="headerTodayTime" class="font-bold text-indigo-400 text-xs sm:text-sm">0時間 0分</span>
+            </div>
+            <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
+            <div class="text-right hidden sm:block">
+                <span class="text-[10px] text-slate-400 block">今週の累計</span>
+                <span id="headerWeeklyTime" class="font-bold text-purple-400 text-xs sm:text-sm">0時間 0分</span>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- 左側: タイマー & アイテムインベントリ & タスク (5カラム) -->
+    <section class="lg:col-span-5 space-y-6">
+
+        <!-- アイテムインベントリ（獲得アイテム表示エリア） -->
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur">
+            <div class="flex items-center justify-between mb-3 border-b border-slate-700/50 pb-2">
+                <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-box-archive text-amber-400"></i> 所持アイテム（インベントリ）
+                </h2>
+                <span class="text-[10px] text-slate-400">集中達成でGET!</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <!-- ☕️ 30分長休憩チケット -->
+                <div class="bg-slate-900/80 border border-amber-500/30 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden group">
+                    <div class="flex items-center justify-between">
+                        <span class="text-2xl">☕️</span>
+                        <span id="badgeCoffeeCount" class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            x 0
+                        </span>
+                    </div>
+                    <div class="mt-2">
+                        <div class="text-xs font-bold text-slate-200">30分長休憩</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">4回達成で獲得 / サイクルリセット</div>
+                    </div>
+                    <button id="btnUseCoffee" onclick="useCoffeeTicket()" disabled class="mt-2.5 w-full py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow transition-all disabled:opacity-30 disabled:pointer-events-none">
+                        使う
+                    </button>
+                </div>
+
+                <!-- 🧘🏼 10分延長チケット -->
+                <div class="bg-slate-900/80 border border-emerald-500/30 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden group">
+                    <div class="flex items-center justify-between">
+                        <span class="text-2xl">🧘🏼</span>
+                        <span id="badgeYogaCount" class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            x 0
+                        </span>
+                    </div>
+                    <div class="mt-2">
+                        <div class="text-xs font-bold text-slate-200">10分休憩延長</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">確率20%で獲得 / 休憩中+10分</div>
+                    </div>
+                    <button id="btnUseYoga" onclick="useYogaTicket()" disabled class="mt-2.5 w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs shadow transition-all disabled:opacity-30 disabled:pointer-events-none">
+                        休憩を延長
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ポモドーロタイマーカード -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 shadow-2xl backdrop-blur relative overflow-hidden">
+            <!-- 状態表示バッジ -->
+            <div class="flex items-center justify-between mb-4">
+                <span id="timerModeBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1.5">
+                    <i class="fa-solid fa-brain text-indigo-400"></i> <span id="timerModeText">25分 集中タイム</span>
+                </span>
+                <span id="sessionCycleBadge" class="text-xs text-slate-400 font-medium">
+                    第 <span id="currentSessionNum" class="text-amber-400 font-bold text-sm">1</span> / 4 セッション
+                </span>
+            </div>
+
+            <!-- 時間カウントダウン表示 -->
+            <div class="text-center my-4 py-2">
+                <div id="timerDisplay" class="text-6xl sm:text-7xl font-extrabold font-mono tracking-tight text-slate-100 drop-shadow-md">
+                    25:00
+                </div>
+                <div class="text-xs text-slate-400 mt-2 flex items-center justify-center gap-2">
+                    <span id="timerSubjectTag" class="px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-indigo-300 font-medium">
+                        算数
+                    </span>
+                    <span id="timerSubText">集中して学習に取り組みましょう</span>
+                </div>
+            </div>
+
+            <!-- 操作インタラクション (左右開始/停止 + 中央確定設定ボタン) -->
+            <div class="mt-6 pt-4 border-t border-slate-700/60">
+                <p class="text-[11px] text-center text-slate-400 mb-3">
+                    左右の操作選択後、中央の「確定」ボタンを押してください
+                </p>
+                <div class="grid grid-cols-3 gap-3 items-center max-w-xs mx-auto">
+                    <!-- 左カラム (開始 / 停止) -->
+                    <div class="flex flex-col gap-2">
+                        <button id="btnStartLeft" onclick="selectAction('start')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-emerald-500/50 text-emerald-400 font-bold hover:bg-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-play text-xs"></i>
+                            <span class="text-xs">開始</span>
+                        </button>
+                        <button id="btnPauseLeft" onclick="selectAction('pause')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-rose-500/50 text-rose-400 font-bold hover:bg-rose-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-pause text-xs"></i>
+                            <span class="text-xs">停止</span>
+                        </button>
+                    </div>
+
+                    <!-- 中央カラム: 決定/設定ボタン -->
+                    <div class="flex flex-col items-center justify-center">
+                        <button id="btnConfirmCenter" onclick="confirmAction()" class="w-20 h-20 rounded-2xl bg-slate-950 border-2 border-slate-600 text-slate-300 font-bold flex flex-col items-center justify-center transition-all duration-300 shadow-xl active:scale-90">
+                            <i id="confirmIcon" class="fa-solid fa-gear text-xl mb-1"></i>
+                            <span id="confirmText" class="text-[10px]">設定</span>
+                        </button>
+                    </div>
+
+                    <!-- 右カラム (開始 / 停止) -->
+                    <div class="flex flex-col gap-2">
+                        <button id="btnStartRight" onclick="selectAction('start')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-emerald-500/50 text-emerald-400 font-bold hover:bg-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-play text-xs"></i>
+                            <span class="text-xs">開始</span>
+                        </button>
+                        <button id="btnPauseRight" onclick="selectAction('pause')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-rose-500/50 text-rose-400 font-bold hover:bg-rose-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-pause text-xs"></i>
+                            <span class="text-xs">停止</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タイマー用科目設定 -->
+            <div class="mt-4 pt-3 border-t border-slate-700/50 flex items-center gap-2">
+                <label class="text-xs font-medium text-slate-400 whitespace-nowrap">学習科目:</label>
+                <select id="timerSubjectSelect" onchange="updateTimerSubject()" class="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs sm:text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500">
+                    <option value="算数" selected>算数</option>
+                    <option value="国語">国語</option>
+                    <option value="理科">理科</option>
+                    <option value="社会">社会</option>
+                    <option value="プログラミング">プログラミング</option>
+                    <option value="自習">自習</option>
+                    <option value="その他">その他</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 学習タスク管理カード -->
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+                <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-indigo-400"></i> 学習タスク (ToDo)
+                </h2>
+                <span id="taskProgressBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-950 text-indigo-300 border border-indigo-500/30">
+                    0 / 0 完了
+                </span>
+            </div>
+
+            <!-- タスク追加フォーム -->
+            <div class="space-y-2">
+                <div class="flex gap-2">
+                    <input type="text" id="taskTitleInput" placeholder="例: 算数ドリル P.12~15" class="flex-1 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    <input type="number" id="taskMinsInput" placeholder="目標(分)" min="1" max="300" class="w-20 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-2 py-2 text-center focus:outline-none focus:border-indigo-500">
+                </div>
+                <div class="flex gap-2 items-center">
+                    <select id="taskSubjectSelect" class="w-1/3 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-indigo-500">
+                        <option value="算数">算数</option>
+                        <option value="国語">国語</option>
+                        <option value="理科">理科</option>
+                        <option value="社会">社会</option>
+                        <option value="プログラミング">プログラミング</option>
+                        <option value="自習">自習</option>
+                        <option value="その他">その他</option>
+                    </select>
+                    <!-- 分単位で指定できる期限日時インプット -->
+                    <input type="datetime-local" id="taskDueInput" title="期限日時（分単位で指定）" class="flex-1 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-2 py-1.5 focus:outline-none focus:border-indigo-500">
+                    <button onclick="addTask()" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow transition-all flex items-center gap-1 whitespace-nowrap">
+                        <i class="fa-solid fa-plus text-[10px]"></i> 追加
+                    </button>
+                </div>
+            </div>
+
+            <!-- タスクリスト -->
+            <div class="max-h-52 overflow-y-auto pr-1 space-y-2" id="taskListContainer">
+                <!-- JSで動的生成 -->
+            </div>
+        </div>
+
+    </section>
+
+    <!-- 右側: 統計・グラフ・ログリスト (7カラム) -->
+    <section class="lg:col-span-7 space-y-6">
+
+        <!-- 統計概要カード -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center">
+                <span class="text-[10px] text-slate-400 block mb-1">本日の学習時間</span>
+                <span id="statToday" class="text-base sm:text-lg font-extrabold text-indigo-400">0分</span>
+            </div>
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center">
+                <span class="text-[10px] text-slate-400 block mb-1">今週の学習時間</span>
+                <span id="statWeekly" class="text-base sm:text-lg font-extrabold text-purple-400">0分</span>
+            </div>
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center">
+                <span class="text-[10px] text-slate-400 block mb-1">完了セッション</span>
+                <span id="statSessions" class="text-base sm:text-lg font-extrabold text-amber-400">0回</span>
+            </div>
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3.5 text-center">
+                <span class="text-[10px] text-slate-400 block mb-1">獲得アイテム数</span>
+                <span id="statItems" class="text-base sm:text-lg font-extrabold text-emerald-400">0個</span>
+            </div>
+        </div>
+
+        <!-- グラフエリア -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- 日別学習量 (バーチャート) -->
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-chart-column text-indigo-400"></i> 日別学習時間 (分)
+                    </h3>
+                    <div class="flex text-[10px] bg-slate-900 rounded-lg p-0.5 border border-slate-700">
+                        <button onclick="switchChartPeriod('7days')" id="btnPeriod7" class="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold">7日間</button>
+                        <button onclick="switchChartPeriod('30days')" id="btnPeriod30" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">30日間</button>
+                    </div>
+                </div>
+                <div class="h-44 relative">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 科目別割合 (ドーナツチャート) -->
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-chart-pie text-purple-400"></i> 科目別比率
+                    </h3>
+                </div>
+                <div class="h-44 relative flex items-center justify-center">
+                    <canvas id="doughnutChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 学習履歴ログ -->
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
+                <h3 class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> 学習完了ログ
+                </h3>
+                <button onclick="generateSampleData()" class="text-[10px] text-indigo-400 hover:underline">
+                    + テスト用データ生成
+                </button>
+            </div>
+            <div id="logListContainer" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                <!-- JSで動的生成 -->
+            </div>
+        </div>
+
+    </section>
+
+</main>
+
+<!-- トースト通知 UI -->
+<div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+<script>
+// Supabase 設定（提供されたURLとKeyを使用）
+const SUPABASE_URL = 'https://qfzyrogwyjbzbblnvqzy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw';
+let supabaseClient = null;
+
+if (window.supabase) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+}
+
+/* アプリケーションの状態管理 */
+let timerState = {
+    mode: 'focus', // 'focus', 'shortBreak', 'coffeeBreak'
+    isRunning: false,
+    timeLeft: 25 * 60,
+    totalDuration: 25 * 60,
+    intervalId: null,
+    subject: '算数',
+    sessionInCycle: 1, // 1~4 セッション目
+    coffeeCount: 0,    // ☕️ 30分長休憩チケット
+    yogaCount: 0,      // 🧘🏼 10分休憩延長チケット
+    yogaUsedInCurrentBreak: 0, // 現在の休憩で使った🧘🏼の回数 (上限2回)
+    config: {
+        focus: 25,
+        shortBreak: 5
+    }
+};
+
+let pendingAction = null; // 'start' または 'pause'
+let studyLogs = [];
+let taskList = [];
+let activePeriod = '7days';
+let barChartInstance = null;
+let doughnutChartInstance = null;
+
+/* アプリ初期化 */
+window.onload = function() {
+    loadSettingsAndItems();
+    loadLogsFromSupabase();
+    loadTasksFromSupabase();
+    resetTimer();
+    initCharts();
+    updateDashboard();
+    updateClock();
+    setInterval(updateClock, 1000);
+};
+
+/* 正確な現在時刻表示 */
+function updateClock() {
+    const clockEl = document.getElementById('headerClock');
+    if (!clockEl) return;
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    clockEl.textContent = `${hours}:${minutes}:${seconds}`;
+}
+
+/* 簡易サウンド効果 */
+function playSound(type) {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        if (type === 'complete') {
+            osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.5);
+        } else if (type === 'item') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.4);
+        }
+    } catch (e) { console.log(e); }
+}
+
+/* トースト通知 */
+function showToast(msg, iconClass = 'fa-circle-check text-indigo-400') {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const div = document.createElement('div');
+    div.className = 'bg-slate-800 border border-slate-700 text-slate-100 text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 transform transition-all duration-300 translate-y-4 opacity-0 pointer-events-auto';
+    div.innerHTML = `<i class="fa-solid ${iconClass} text-base"></i><span>${msg}</span>`;
+    container.appendChild(div);
+
+    setTimeout(() => {
+        div.classList.remove('translate-y-4', 'opacity-0');
+    }, 10);
+
+    setTimeout(() => {
+        div.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => div.remove(), 300);
+    }, 3500);
+}
+
+/* 左右の「開始/停止」ボタンを押したときの処理 */
+function selectAction(action) {
+    if (action === 'start' && timerState.isRunning) return;
+    if (action === 'pause' && !timerState.isRunning) return;
+
+    pendingAction = action;
+
+    const btnConfirm = document.getElementById('btnConfirmCenter');
+    const confirmText = document.getElementById('confirmText');
+    const confirmIcon = document.getElementById('confirmIcon');
+
+    btnConfirm.classList.add('confirm-glow');
+
+    if (action === 'start') {
+        confirmText.textContent = '決定 (開始)';
+        confirmIcon.className = 'fa-solid fa-circle-play text-xl mb-1';
+        showToast('中央のボタンを押すと【開始】します', 'fa-hand-pointer text-amber-400');
+    } else if (action === 'pause') {
+        confirmText.textContent = '決定 (停止)';
+        confirmIcon.className = 'fa-solid fa-circle-pause text-xl mb-1';
+        showToast('中央のボタンを押すと【停止】します', 'fa-hand-pointer text-rose-400');
+    }
+}
+
+/* 開始・停止ボタンの有効/無効状態を更新 */
+function updateButtonStates() {
+    const startBtns = [document.getElementById('btnStartLeft'), document.getElementById('btnStartRight')];
+    const pauseBtns = [document.getElementById('btnPauseLeft'), document.getElementById('btnPauseRight')];
+
+    startBtns.forEach(btn => {
+        if (!btn) return;
+        btn.disabled = timerState.isRunning;
+    });
+
+    pauseBtns.forEach(btn => {
+        if (!btn) return;
+        btn.disabled = !timerState.isRunning;
+    });
+
+    // アイテムボタンの制御
+    const btnCoffee = document.getElementById('btnUseCoffee');
+    if (btnCoffee) btnCoffee.disabled = timerState.coffeeCount <= 0;
+
+    const btnYoga = document.getElementById('btnUseYoga');
+    if (btnYoga) {
+        const isBreak = timerState.mode === 'shortBreak' || timerState.mode === 'coffeeBreak';
+        btnYoga.disabled = !(timerState.yogaCount > 0 && isBreak && timerState.yogaUsedInCurrentBreak < 2);
+    }
+}
+
+/* 中央の設定/決定ボタンを押したときの処理 */
+function confirmAction() {
+    const btnConfirm = document.getElementById('btnConfirmCenter');
+    
+    if (pendingAction === 'start') {
+        startTimer();
+        pendingAction = null;
+        btnConfirm.classList.remove('confirm-glow');
+        resetConfirmButtonText();
+    } else if (pendingAction === 'pause') {
+        pauseTimer();
+        pendingAction = null;
+        btnConfirm.classList.remove('confirm-glow');
+        resetConfirmButtonText();
+    } else {
+        showToast('左右の「開始」か「停止」を選択してください', 'fa-circle-info text-sky-400');
+    }
+}
+
+function resetConfirmButtonText() {
+    const confirmText = document.getElementById('confirmText');
+    const confirmIcon = document.getElementById('confirmIcon');
+    confirmText.textContent = '設定';
+    confirmIcon.className = 'fa-solid fa-gear text-xl mb-1';
+}
+
+function resetTimer() {
+    pauseTimer();
+    let minutes = timerState.config.focus;
+    if (timerState.mode === 'shortBreak') {
+        minutes = timerState.config.shortBreak;
+    } else if (timerState.mode === 'coffeeBreak') {
+        minutes = 30; // ☕️ 30分長休憩
+    }
+    
+    timerState.totalDuration = minutes * 60;
+    timerState.timeLeft = minutes * 60;
+    updateTimerDisplay();
+    updateButtonStates();
+}
+
+function startTimer() {
+    if (timerState.isRunning) return;
+    timerState.isRunning = true;
+
+    timerState.intervalId = setInterval(() => {
+        timerState.timeLeft--;
+        updateTimerDisplay();
+
+        if (timerState.timeLeft <= 0) {
+            handleTimerComplete();
+        }
+    }, 1000);
+
+    updateButtonStates();
+    showToast('タイマーを開始しました！集中しましょう🔥', 'fa-play text-emerald-400');
+}
+
+function pauseTimer() {
+    timerState.isRunning = false;
+    if (timerState.intervalId) {
+        clearInterval(timerState.intervalId);
+    }
+    updateButtonStates();
+}
+
+function updateTimerDisplay() {
+    const display = document.getElementById('timerDisplay');
+    const modeText = document.getElementById('timerModeText');
+    const modeBadge = document.getElementById('timerModeBadge');
+    const subText = document.getElementById('timerSubText');
+    const sessionNum = document.getElementById('currentSessionNum');
+
+    if (!display) return;
+
+    const m = Math.floor(timerState.timeLeft / 60);
+    const s = timerState.timeLeft % 60;
+    display.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+    if (sessionNum) sessionNum.textContent = timerState.sessionInCycle;
+
+    if (timerState.mode === 'focus') {
+        modeText.textContent = '25分 集中タイム';
+        modeBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1.5';
+        subText.textContent = '集中して学習に取り組みましょう';
+    } else if (timerState.mode === 'shortBreak') {
+        modeText.textContent = '5分 休憩タイム';
+        modeBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5';
+        subText.textContent = 'リラックスして深呼吸しましょう ☕️';
+    } else if (timerState.mode === 'coffeeBreak') {
+        modeText.textContent = '☕️ 30分 長休憩タイム';
+        modeBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5';
+        subText.textContent = 'しっかり休んでリフレッシュ！';
+    }
+}
+
+/* ポモドーロ完了時の判定・ゲーム演出 */
+function handleTimerComplete() {
+    pauseTimer();
+    playSound('complete');
+
+    if (timerState.mode === 'focus') {
+        // 学習ログ追加
+        addStudyLog(timerState.subject, timerState.config.focus);
+
+        // 判定: 4回目のセッション完了時 ☕️ 獲得
+        if (timerState.sessionInCycle >= 4) {
+            timerState.coffeeCount++;
+            triggerConfetti();
+            playSound('item');
+            showToast('🎉 4セッション達成！ ☕️ 30分長休憩チケットを獲得しました！', 'fa-mug-hot text-amber-400');
+        } else {
+            triggerConfetti();
+            showToast('🎉 集中タイム完了！素晴らしい集中力です！', 'fa-trophy text-amber-400');
+        }
+
+        // 確率 20% で 🧘🏼 (10分延長チケット) ランダム獲得
+        if (Math.random() < 0.20) {
+            timerState.yogaCount++;
+            setTimeout(() => {
+                playSound('item');
+                showToast('✨ ラッキー！ 🧘🏼 10分休憩延長チケットを獲得！', 'fa-spa text-emerald-400');
+            }, 800);
+        }
+
+        saveSettingsAndItems();
+
+        // 自動で5分休憩に移動して開始
+        timerState.mode = 'shortBreak';
+        timerState.yogaUsedInCurrentBreak = 0;
+        resetTimer();
+        startTimer();
+
+    } else {
+        // 休憩終了時
+        showToast('休憩終了！次の集中セッションを開始しましょう🔥', 'fa-bell text-indigo-400');
+        
+        if (timerState.mode === 'shortBreak') {
+            if (timerState.sessionInCycle >= 4) {
+                timerState.sessionInCycle = 1;
+            } else {
+                timerState.sessionInCycle++;
+            }
+        } else if (timerState.mode === 'coffeeBreak') {
+            timerState.sessionInCycle = 1;
+        }
+
+        timerState.mode = 'focus';
+        timerState.yogaUsedInCurrentBreak = 0;
+        resetTimer();
+    }
+}
+
+/* ☕️ 30分長休憩チケットを使う */
+function useCoffeeTicket() {
+    if (timerState.coffeeCount <= 0) return;
+
+    timerState.coffeeCount--;
+    timerState.sessionInCycle = 1; // 最初からリセット
+    timerState.mode = 'coffeeBreak';
+    timerState.yogaUsedInCurrentBreak = 0;
+
+    saveSettingsAndItems();
+    resetTimer();
+    startTimer();
+    triggerConfetti();
+    showToast('☕️ 30分長休憩チケットを使用しました！', 'fa-mug-hot text-amber-400');
+}
+
+/* 🧘🏼 10分延長チケットを使う */
+function useYogaTicket() {
+    const isBreak = timerState.mode === 'shortBreak' || timerState.mode === 'coffeeBreak';
+    if (!isBreak) {
+        showToast('延長チケットは休憩中にのみ使用できます', 'fa-circle-exclamation text-amber-400');
+        return;
+    }
+    if (timerState.yogaUsedInCurrentBreak >= 2) {
+        showToast('この休憩ではこれ以上延長できません（上限2回）', 'fa-hand text-rose-400');
+        return;
+    }
+    if (timerState.yogaCount <= 0) return;
+
+    timerState.yogaCount--;
+    timerState.yogaUsedInCurrentBreak++;
+    timerState.timeLeft += 10 * 60;
+    timerState.totalDuration += 10 * 60;
+
+    saveSettingsAndItems();
+    updateTimerDisplay();
+    updateButtonStates();
+    playSound('item');
+    showToast('🧘🏼 休憩時間を+10分延長しました！', 'fa-spa text-emerald-400');
+}
+
+/* 紙吹雪演出 */
+function triggerConfetti() {
+    if (typeof confetti === 'function') {
+        confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 }
+        });
+    }
+}
+
+function updateTimerSubject() {
+    const select = document.getElementById('timerSubjectSelect');
+    const tag = document.getElementById('timerSubjectTag');
+    if (select && tag) {
+        timerState.subject = select.value;
+        tag.textContent = select.value;
+    }
+}
+
+/* タスク管理機能 (Supabase連携 & 分単位期限設定対応) */
+async function loadTasksFromSupabase() {
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .select('*')
+                .order('id', { ascending: false });
+            if (!error && data) {
+                taskList = data;
+                renderTasks();
+                return;
+            }
+        } catch (e) {
+            console.error('Supabase load tasks error:', e);
+        }
+    }
+    // フォールバック（ローカルストレージ）
+    const saved = localStorage.getItem('focustrack_tasks');
+    if (saved) {
+        try { taskList = JSON.parse(saved); } catch (e) { taskList = []; }
+    }
+    renderTasks();
+}
+
+async function addTask() {
+    const titleInput = document.getElementById('taskTitleInput');
+    const minsInput = document.getElementById('taskMinsInput');
+    const subjectSelect = document.getElementById('taskSubjectSelect');
+    const dueInput = document.getElementById('taskDueInput');
+
+    const title = titleInput.value.trim();
+    if (!title) {
+        showToast('タスク名を入力してください', 'fa-triangle-exclamation text-amber-400');
+        return;
+    }
+
+    const mins = parseInt(minsInput.value) || 0;
+    const subject = subjectSelect.value;
+    const dueAt = dueInput.value ? new Date(dueInput.value).toISOString() : null;
+
+    const newTask = {
+        title: title,
+        mins: mins,
+        subject: subject,
+        completed: false,
+        due_at: dueAt
+    };
+
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .insert([newTask])
+                .select();
+            if (!error && data && data.length > 0) {
+                taskList.unshift(data[0]);
+                showToast('Supabaseにタスクを保存しました！');
+            } else {
+                console.error('Supabase error:', error);
+                newTask.id = Date.now();
+                taskList.unshift(newTask);
+                showToast('タスクを追加しました(ローカル)');
+            }
+        } catch (e) {
+            newTask.id = Date.now();
+            taskList.unshift(newTask);
+            showToast('タスクを追加しました(ローカル)');
+        }
+    } else {
+        newTask.id = Date.now();
+        taskList.unshift(newTask);
+        showToast('タスクを追加しました！');
+    }
+
+    titleInput.value = '';
+    minsInput.value = '';
+    dueInput.value = '';
+    saveTasksLocal();
+    renderTasks();
+}
+
+async function toggleTask(id) {
+    const task = taskList.find(t => t.id === id);
+    if (!task) return;
+
+    task.completed = !task.completed;
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('tasks')
+                .update({ completed: task.completed })
+                .eq('id', id);
+        } catch (e) { console.error(e); }
+    }
+
+    saveTasksLocal();
+    renderTasks();
+    if (task.completed) {
+        triggerConfetti();
+        playSound('complete');
+        showToast('タスク完了！お疲れ様です 🎉');
+    }
+}
+
+async function deleteTask(id) {
+    taskList = taskList.filter(t => t.id !== id);
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('tasks')
+                .delete()
+                .eq('id', id);
+        } catch (e) { console.error(e); }
+    }
+
+    saveTasksLocal();
+    renderTasks();
+    showToast('タスクを削除しました');
+}
+
+function saveTasksLocal() {
+    localStorage.setItem('focustrack_tasks', JSON.stringify(taskList));
+}
+
+function renderTasks() {
+    const container = document.getElementById('taskListContainer');
+    const badge = document.getElementById('taskProgressBadge');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const completedCount = taskList.filter(t => t.completed).length;
+    if (badge) badge.textContent = `${completedCount} / ${taskList.length} 完了`;
+
+    if (taskList.length === 0) {
+        container.innerHTML = `<div class="text-center py-4 text-xs text-slate-500">タスクはまだありません</div>`;
+        return;
+    }
+
+    const now = new Date();
+
+    taskList.forEach(task => {
+        const div = document.createElement('div');
+        
+        // 期限フォーマット (分単位) & 期限切れ判定
+        let dueStr = '';
+        let isOverdue = false;
+        if (task.due_at) {
+            const dueDate = new Date(task.due_at);
+            const month = dueDate.getMonth() + 1;
+            const day = dueDate.getDate();
+            const hours = String(dueDate.getHours()).padStart(2, '0');
+            const mins = String(dueDate.getMinutes()).padStart(2, '0');
+            dueStr = `${month}/${day} ${hours}:${mins}`;
+            
+            if (!task.completed && dueDate < now) {
+                isOverdue = true;
+            }
+        }
+
+        div.className = `p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+            task.completed 
+                ? 'bg-slate-900/40 border-slate-800 opacity-60' 
+                : isOverdue 
+                    ? 'bg-rose-950/30 border-rose-500/50 hover:border-rose-400' 
+                    : 'bg-slate-950 border-slate-700/80 hover:border-indigo-500/40'
+        }`;
+
+        div.innerHTML = `
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                <input type="checkbox" ${task.completed ? 'checked' : ''} onchange="toggleTask(${task.id})" class="w-4 h-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer bg-slate-800">
+                <div class="min-w-0 flex-1">
+                    <div class="text-xs font-semibold text-slate-200 truncate ${task.completed ? 'line-through text-slate-500' : ''}">${escapeHtml(task.title)}</div>
+                    <div class="flex items-center flex-wrap gap-2 mt-0.5 text-[10px] text-slate-400">
+                        <span class="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-700 text-indigo-300">${escapeHtml(task.subject)}</span>
+                        ${task.mins > 0 ? `<span><i class="fa-regular fa-clock text-[9px] mr-0.5"></i>${task.mins}分</span>` : ''}
+                        ${dueStr ? `
+                            <span class="${isOverdue ? 'text-rose-400 font-bold' : 'text-amber-300'} flex items-center gap-1">
+                                <i class="fa-regular fa-calendar-check text-[9px]"></i> 期限: ${dueStr}
+                                ${isOverdue ? '<span class="bg-rose-500 text-white text-[9px] px-1 rounded">超過</span>' : ''}
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+            <button onclick="deleteTask(${task.id})" class="text-slate-500 hover:text-rose-400 p-1 transition-colors">
+                <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* データ保存＆読み込み */
+function saveSettingsAndItems() {
+    const data = {
+        coffeeCount: timerState.coffeeCount,
+        yogaCount: timerState.yogaCount
+    };
+    localStorage.setItem('focustrack_items', JSON.stringify(data));
+    updateItemBadges();
+}
+
+function loadSettingsAndItems() {
+    const saved = localStorage.getItem('focustrack_items');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            timerState.coffeeCount = data.coffeeCount || 0;
+            timerState.yogaCount = data.yogaCount || 0;
+        } catch (e) {}
+    }
+    updateItemBadges();
+}
+
+function updateItemBadges() {
+    const coffeeBadge = document.getElementById('badgeCoffeeCount');
+    const yogaBadge = document.getElementById('badgeYogaCount');
+    if (coffeeBadge) coffeeBadge.textContent = `x ${timerState.coffeeCount}`;
+    if (yogaBadge) yogaBadge.textContent = `x ${timerState.yogaCount}`;
+    updateButtonStates();
+}
+
+async function loadLogsFromSupabase() {
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('study_logs')
+                .select('*')
+                .order('id', { ascending: false });
+            if (!error && data) {
+                studyLogs = data;
+                updateDashboard();
+                return;
+            }
+        } catch (e) {
+            console.error('Supabase load logs error:', e);
+        }
+    }
+    const saved = localStorage.getItem('focustrack_logs');
+    if (saved) {
+        try { studyLogs = JSON.parse(saved); } catch (e) { studyLogs = []; }
+    }
+    updateDashboard();
+}
+
+async function addStudyLog(subject, minutes) {
+    const now = new Date();
+    const log = {
+        date: now.toISOString().split('T')[0],
+        time: now.toTimeString().slice(0, 5),
+        subject: subject,
+        minutes: minutes
+    };
+
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('study_logs')
+                .insert([log])
+                .select();
+            if (!error && data && data.length > 0) {
+                studyLogs.unshift(data[0]);
+            } else {
+                log.id = Date.now();
+                studyLogs.unshift(log);
+            }
+        } catch (e) {
+            log.id = Date.now();
+            studyLogs.unshift(log);
+        }
+    } else {
+        log.id = Date.now();
+        studyLogs.unshift(log);
+    }
+
+    saveLogsLocal();
+    updateDashboard();
+}
+
+function saveLogsLocal() {
+    localStorage.setItem('focustrack_logs', JSON.stringify(studyLogs));
+}
+
+async function deleteLog(id) {
+    studyLogs = studyLogs.filter(l => l.id !== id);
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('study_logs')
+                .delete()
+                .eq('id', id);
+        } catch (e) { console.error(e); }
+    }
+
+    saveLogsLocal();
+    updateDashboard();
+    showToast('ログを削除しました');
+}
+
+/* ダッシュボード・グラフ更新 */
+function updateDashboard() {
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // 本日の合計
+    const todayMins = studyLogs
+        .filter(l => l.date === todayStr)
+        .reduce((sum, l) => sum + l.minutes, 0);
+
+    // 今週の合計 (過去7日)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const weeklyMins = studyLogs
+        .filter(l => new Date(l.date) >= sevenDaysAgo)
+        .reduce((sum, l) => sum + l.minutes, 0);
+
+    document.getElementById('statToday').textContent = `${todayMins}分`;
+    document.getElementById('statWeekly').textContent = `${weeklyMins}分`;
+    document.getElementById('statSessions').textContent = `${studyLogs.length}回`;
+    document.getElementById('statItems').textContent = `${timerState.coffeeCount + timerState.yogaCount}個`;
+
+    document.getElementById('headerTodayTime').textContent = `${Math.floor(todayMins/60)}時間 ${todayMins%60}分`;
+    document.getElementById('headerWeeklyTime').textContent = `${Math.floor(weeklyMins/60)}時間 ${weeklyMins%60}分`;
+
+    renderLogsList();
+    updateCharts();
+}
+
+function renderLogsList() {
+    const container = document.getElementById('logListContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (studyLogs.length === 0) {
+        container.innerHTML = `<div class="text-center py-6 text-xs text-slate-500">学習ログはまだありません</div>`;
+        return;
+    }
+
+    studyLogs.slice(0, 10).forEach(log => {
+        const div = document.createElement('div');
+        div.className = 'p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs';
+        div.innerHTML = `
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                <span class="font-bold text-slate-200">${escapeHtml(log.subject)}</span>
+                <span class="text-slate-400 text-[10px]">${log.date} ${log.time}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="font-mono text-indigo-300 font-bold">+${log.minutes}分</span>
+                <button onclick="deleteLog(${log.id})" class="text-slate-600 hover:text-rose-400 text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+/* Chart.js グラフ処理 */
+function initCharts() {
+    const ctxBar = document.getElementById('barChart');
+    const ctxDoughnut = document.getElementById('doughnutChart');
+
+    if (ctxBar) {
+        barChartInstance = new Chart(ctxBar, {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: '学習時間 (分)', data: [], backgroundColor: '#6366f1', borderRadius: 6 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { display: false } },
+                    y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#334155' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    if (ctxDoughnut) {
+        doughnutChartInstance = new Chart(ctxDoughnut, {
+            type: 'doughnut',
+            data: {
+                labels: ['算数', '国語', '理科', '社会', 'プログラミング', '自習', 'その他'],
+                datasets: [{
+                    data: [0, 0, 0, 0, 0, 0, 0],
+                    backgroundColor: ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#64748b']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 10 } } }
+            }
+        });
+    }
+}
+
+function updateCharts() {
+    if (!barChartInstance || !doughnutChartInstance) return;
+
+    // バーチャート（過去7日または30日）
+    const daysCount = activePeriod === '7days' ? 7 : 30;
+    const labels = [];
+    const data = [];
+
+    for (let i = daysCount - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        labels.push(`${d.getMonth()+1}/${d.getDate()}`);
+
+        const dayMins = studyLogs
+            .filter(l => l.date === dateStr)
+            .reduce((sum, l) => sum + l.minutes, 0);
+        data.push(dayMins);
+    }
+
+    barChartInstance.data.labels = labels;
+    barChartInstance.data.datasets[0].data = data;
+    barChartInstance.update();
+
+    // ドーナツチャート
+    const subjects = ['算数', '国語', '理科', '社会', 'プログラミング', '自習', 'その他'];
+    const subjectData = subjects.map(s => {
+        return studyLogs.filter(l => l.subject === s).reduce((sum, l) => sum + l.minutes, 0);
+    });
+
+    doughnutChartInstance.data.datasets[0].data = subjectData;
+    doughnutChartInstance.update();
+}
+
+function switchChartPeriod(period) {
+    activePeriod = period;
+    const btn7 = document.getElementById('btnPeriod7');
+    const btn30 = document.getElementById('btnPeriod30');
+
+    if (period === '7days') {
+        btn7.className = 'px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold';
+        btn30.className = 'px-2 py-0.5 rounded-md text-slate-400 hover:text-white';
+    } else {
+        btn30.className = 'px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold';
+        btn7.className = 'px-2 py-0.5 rounded-md text-slate-400 hover:text-white';
+    }
+    updateCharts();
+}
+
+/* サンプルデータ生成 */
+function generateSampleData() {
+    const subjects = ['算数', '国語', '理科', '社会', 'プログラミング', '自習', 'その他'];
+    const newLogs = [];
+
+    for (let i = 0; i < 6; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - Math.floor(Math.random() * 5));
+        newLogs.push({
+            id: Date.now() + i,
+            date: d.toISOString().split('T')[0],
+            time: '15:30',
+            subject: subjects[Math.floor(Math.random() * subjects.length)],
+            minutes: 25
+        });
+    }
+
+    studyLogs = [...newLogs, ...studyLogs];
+    saveLogs();
+    updateDashboard();
+    showToast('テスト用の集中ログを追加しました！');
+}
+</script>
+</body>
+</html>
