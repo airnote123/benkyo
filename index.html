@@ -898,16 +898,32 @@ function escapeHtml(str) {
 }
 
 /* データ保存＆読み込み */
-function saveSettingsAndItems() {
+async function saveSettingsAndItems() {
     const data = {
         coffeeCount: timerState.coffeeCount,
         yogaCount: timerState.yogaCount
     };
     localStorage.setItem('focustrack_items', JSON.stringify(data));
     updateItemBadges();
+
+    // Supabaseにアイテム数を非同期で同期
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('user_settings')
+                .upsert({
+                    id: 1,
+                    coffee_count: timerState.coffeeCount,
+                    yoga_count: timerState.yogaCount
+                });
+        } catch (e) {
+            console.error('Supabase items save error:', e);
+        }
+    }
 }
 
-function loadSettingsAndItems() {
+async function loadSettingsAndItems() {
+    // まずローカルストレージから即座に読み込み
     const saved = localStorage.getItem('focustrack_items');
     if (saved) {
         try {
@@ -915,6 +931,24 @@ function loadSettingsAndItems() {
             timerState.coffeeCount = data.coffeeCount || 0;
             timerState.yogaCount = data.yogaCount || 0;
         } catch (e) {}
+    }
+
+    // Supabaseから最新のアイテム数を取得・更新
+    if (supabaseClient) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('user_settings')
+                .select('*')
+                .eq('id', 1)
+                .single();
+            
+            if (!error && data) {
+                timerState.coffeeCount = data.coffee_count ?? 0;
+                timerState.yogaCount = data.yoga_count ?? 0;
+            }
+        } catch (e) {
+            console.error('Supabase items load error:', e);
+        }
     }
     updateItemBadges();
 }
