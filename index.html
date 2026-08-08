@@ -403,7 +403,7 @@
                 <li><span class="text-amber-300 font-bold">獲得XP:</span> 勉強時間 <span class="font-mono text-emerald-400">1分 = 10 XP</span>（1ポモ 25分 = 250 XP）</li>
                 <li><span class="text-amber-400 font-bold">デイリーリセット:</span> 毎日XPは0からスタートし、その日の頑張りでランクが決まります！</li>
                 <li><span class="text-indigo-300 font-bold">最高ランク目標:</span> 1日10時間（600分 = <span class="font-mono text-indigo-300">6,000 XP</span>）達成で最高ランク「α1 臨界」到達！</li>
-                <li><span class="text-indigo-300 font-bold">コース基準:</span> A:0分 B:25分　C:1時間　D:2時間　E:3.5時間　F:5時間　G:7時間　α2:8.5時間　α1:10時間（600分）</li>
+                <li><span class="text-indigo-300 font-bold">コース基準:</span> A:0分 B:25分 C:1時間 D:2時間 E:3.5時間 F:5時間 G:7時間 α2:8.5時間 α1:10時間（600分）</li>
             </ul>
         </div>
 
@@ -546,20 +546,8 @@ async function saveSettingsAndItemsToCloud() {
 
 /* トースト通知 */
 function showToast(message, type = 'success') {
-    const container = document.getElementById('toastContainer');
-    if (!container) return;
-
-    const toast = document.createElement('div');
-    const bgColors = type === 'success' ? 'bg-emerald-600 text-white' : type === 'warning' ? 'bg-amber-600 text-slate-950 font-bold' : 'bg-indigo-600 text-white';
-    toast.className = `px-4 py-3 rounded-xl shadow-2xl text-xs flex items-center gap-2 transform translate-y-2 opacity-0 transition-all duration-300 ${bgColors}`;
-    toast.innerHTML = `<i class="fa-solid fa-bell"></i> <span>${message}</span>`;
-    
-    container.appendChild(toast);
-    setTimeout(() => { toast.classList.remove('translate-y-2', 'opacity-0'); }, 50);
-    setTimeout(() => {
-        toast.classList.add('translate-y-2', 'opacity-0');
-        setTimeout(() => toast.remove(), 300);
-    }, 3500);
+    // メッセージ非表示設定のため無効化
+    return;
 }
 
 function updateTimerSubject() {
@@ -581,8 +569,6 @@ function selectAction(action) {
     const btnPauseLeft = document.getElementById('btnPauseLeft');
     const btnPauseRight = document.getElementById('btnPauseRight');
     const centerBtn = document.getElementById('btnConfirmCenter');
-    const confirmIcon = document.getElementById('confirmIcon');
-    const confirmText = document.getElementById('confirmText');
 
     [btnStartLeft, btnStartRight, btnPauseLeft, btnPauseRight].forEach(b => {
         if (b) b.classList.remove('ring-2', 'ring-amber-400', 'bg-slate-800');
@@ -591,13 +577,9 @@ function selectAction(action) {
     if (action === 'start') {
         if (btnStartLeft) btnStartLeft.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
         if (btnStartRight) btnStartRight.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
-        confirmIcon.className = 'fa-solid fa-play text-xl mb-1 text-emerald-400';
-        confirmText.textContent = '開始決定';
     } else {
         if (btnPauseLeft) btnPauseLeft.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
         if (btnPauseRight) btnPauseRight.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
-        confirmIcon.className = 'fa-solid fa-pause text-xl mb-1 text-rose-400';
-        confirmText.textContent = '停止決定';
     }
 
     centerBtn.classList.add('confirm-glow');
@@ -605,7 +587,6 @@ function selectAction(action) {
 
 function confirmAction() {
     if (!selectedAction) {
-        showToast('左右の「開始」または「停止」を選択してから中央を押してください', 'warning');
         return;
     }
 
@@ -638,7 +619,7 @@ function updateTimerButtonsState() {
         if (btnPauseRight) { btnPauseRight.disabled = false; btnPauseRight.classList.remove('opacity-30', 'pointer-events-none'); }
     } else {
         if (btnStartLeft) { btnStartLeft.disabled = false; btnStartLeft.classList.remove('opacity-30', 'pointer-events-none'); }
-        if (btnStartRight) { btnStartRight.disabled = false; btnStartRight.classList.add('opacity-30', 'pointer-events-none'); } // 修正: 稼働していなければ開始可能
+        if (btnStartRight) { btnStartRight.disabled = false; btnStartRight.classList.remove('opacity-30', 'pointer-events-none'); }
         if (btnPauseLeft) { btnPauseLeft.disabled = true; btnPauseLeft.classList.add('opacity-30', 'pointer-events-none'); }
         if (btnPauseRight) { btnPauseRight.disabled = true; btnPauseRight.classList.add('opacity-30', 'pointer-events-none'); }
     }
@@ -660,8 +641,6 @@ function startTimer() {
             handleTimerComplete();
         }
     }, 1000);
-
-    showToast(timerMode === 'work' ? '集中セッションを開始しました！' : '休憩セッションを開始しました！', 'success');
 }
 
 function pauseTimer() {
@@ -669,7 +648,6 @@ function pauseTimer() {
     clearInterval(timerInterval);
     isRunning = false;
     updateTimerButtonsState();
-    showToast('タイマーを一時停止しました', 'warning');
 }
 
 function updateTimerDisplay() {
@@ -710,7 +688,6 @@ async function handleTimerComplete() {
         if (window.confetti) {
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         }
-        showToast('🎉 25分集中達成！ 250 XPを獲得しました！', 'success');
 
         // セッション進行
         if (currentSession < 4) {
@@ -723,7 +700,6 @@ async function handleTimerComplete() {
             // 20%の確率で 10分休憩延長チケット獲得
             if (Math.random() < 0.20) {
                 yogaTicketCount++;
-                showToast('🧘🏼 10分休憩延長チケットを獲得しました！', 'success');
             }
         } else {
             // 4回達成で 30分長休憩チケット獲得
@@ -733,7 +709,6 @@ async function handleTimerComplete() {
             coffeeTicketCount++;
             document.getElementById('timerModeText').textContent = '30分 長休憩タイム';
             document.getElementById('timerSubText').textContent = '☕️ 30分長休憩チケットを獲得しました！';
-            showToast('☕️ 4回達成！30分長休憩チケットを獲得しました！', 'success');
             currentSession = 1;
         }
 
@@ -755,7 +730,6 @@ async function handleTimerComplete() {
         document.getElementById('timerModeText').textContent = '25分 集中タイム';
         document.getElementById('timerSubText').textContent = '集中して学習に取り組みましょう';
         document.getElementById('currentSessionNum').textContent = currentSession;
-        showToast('休憩終了！次の集中セッションに備えましょう', 'info');
     }
     updateTimerDisplay();
 }
@@ -774,12 +748,10 @@ async function useCoffeeTicket() {
     updateTimerDisplay();
     await saveSettingsAndItemsToCloud();
     updateDashboard();
-    showToast('☕️ 30分長休憩チケットを使用しました（セッションリセット）', 'success');
 }
 
 async function useYogaTicket() {
     if (yogaTicketCount <= 0 || yogaUsedInCurrentBreak >= 2) {
-        showToast('チケットがないか、この休憩での使用回数上限（2回）に達しています', 'warning');
         return;
     }
     yogaTicketCount--;
@@ -788,7 +760,6 @@ async function useYogaTicket() {
     totalTimerSeconds += 10 * 60;
     updateTimerDisplay();
     await saveSettingsAndItemsToCloud();
-    showToast('🧘🏼 休憩時間が10分延長されました！（残り使用可能回数: ' + (2 - yogaUsedInCurrentBreak) + '回）', 'success');
 }
 
 function updateInventoryUI() {
@@ -816,7 +787,6 @@ async function addTask() {
 
     const title = titleInput.value.trim();
     if (!title) {
-        showToast('タスク名を入力してください', 'warning');
         return;
     }
 
@@ -847,7 +817,6 @@ async function addTask() {
 
     saveSettingsAndItemsToCloud();
     renderTaskList();
-    showToast('学習タスクを追加しました！', 'success');
 }
 
 async function toggleTask(id) {
@@ -858,7 +827,6 @@ async function toggleTask(id) {
 
     if (task.completed && window.confetti) {
         confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
-        showToast('🎉 タスク完了！おめでとうございます！', 'success');
     }
 
     if (supabaseClient) {
@@ -1333,7 +1301,6 @@ function generateSampleData() {
     }
     saveSettingsAndItemsToCloud();
     updateDashboard();
-    showToast('テスト用学習ログデータを生成しました！', 'success');
 }
 </script>
 </body>
