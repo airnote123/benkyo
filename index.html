@@ -308,20 +308,18 @@
 
         <!-- グラフエリア -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <!-- 日別学習量 (バーチャート - 25分刻みポモ・XP・分表示対応) -->
+            <!-- 日別学習量 (バーチャート) -->
             <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col justify-between">
                 <div class="flex items-center justify-between mb-2">
                     <h3 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                         <i class="fa-solid fa-chart-column text-indigo-400"></i> 集中推移グラフ
                     </h3>
                     <div class="flex items-center gap-1.5">
-                        <!-- 単位切り替え (ポモ vs 分 vs XP) -->
                         <div class="flex text-[10px] bg-slate-950 rounded-lg p-0.5 border border-slate-800">
                             <button onclick="switchChartUnit('pomo')" id="btnUnitPomo" class="px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-bold">🍅 ポモ</button>
                             <button onclick="switchChartUnit('mins')" id="btnUnitMins" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">分</button>
                             <button onclick="switchChartUnit('xp')" id="btnUnitXP" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">⚡️ XP</button>
                         </div>
-                        <!-- 期間切り替え (7日 / 30日 / 週別) -->
                         <div class="flex text-[10px] bg-slate-950 rounded-lg p-0.5 border border-slate-800">
                             <button onclick="switchChartPeriod('7days')" id="btnPeriod7" class="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold">7日</button>
                             <button onclick="switchChartPeriod('30days')" id="btnPeriod30" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">30日</button>
@@ -394,7 +392,6 @@
             </button>
         </div>
 
-        <!-- XP計算式 & ランク上下ルール説明カード -->
         <div class="bg-slate-900/90 border border-indigo-500/30 rounded-xl p-3 text-xs space-y-2">
             <div class="font-bold text-indigo-300 flex items-center gap-1.5">
                 <i class="fa-solid fa-calculator text-amber-400"></i> 本日XP & ランクのルール
@@ -417,9 +414,6 @@
         </div>
     </div>
 </div>
-
-<!-- トースト通知 UI -->
-<div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
 <script>
 const SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
@@ -452,6 +446,8 @@ let currentSession = 1;  // 1 ~ 4
 let currentTimerSubject = '算数';
 
 let selectedAction = null; // 'start' or 'pause'
+let targetEndTime = null;  // バックグラウンドズレ防止：終了予定絶対時間（ミリ秒）
+let sessionStartDate = null; // 開始時の日付を保持
 
 // チャート管理
 let barChartInstance = null;
@@ -461,7 +457,7 @@ let hourlyChartInstance = null;
 let activePeriod = '7days'; // '7days', '30days', 'weeks'
 let activeUnit = 'pomo'; // 'pomo', 'mins', 'xp'
 
-// ランク順序: A -> B -> C -> D -> E -> F -> G -> α2 -> α1 (10時間 = 6000 XPで最高ランク)
+// ランク順序: A -> B -> C -> D -> E -> F -> G -> α2 -> α1 (10時間 = 6000 XP)
 const RANKS = [
     { minXP: 0,     rank: 'A',  title: '見習い' }, // 0分
     { minXP: 250,   rank: 'B',  title: '集中' },   // 25分 (1ポモ)
@@ -483,6 +479,13 @@ window.onload = function () {
         startRealtimeClock();
     });
 };
+
+/* バックグラウンド切替時の表示リフレッシュ */
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        updateDashboard();
+    }
+});
 
 /* リアルタイムiPad時計 */
 function startRealtimeClock() {
@@ -544,12 +547,6 @@ async function saveSettingsAndItemsToCloud() {
     updateInventoryUI();
 }
 
-/* トースト通知 */
-function showToast(message, type = 'success') {
-    // メッセージ非表示設定のため無効化
-    return;
-}
-
 function updateTimerSubject() {
     const select = document.getElementById('timerSubjectSelect');
     if (select) {
@@ -586,9 +583,7 @@ function selectAction(action) {
 }
 
 function confirmAction() {
-    if (!selectedAction) {
-        return;
-    }
+    if (!selectedAction) return;
 
     const centerBtn = document.getElementById('btnConfirmCenter');
     centerBtn.classList.remove('confirm-glow');
@@ -630,23 +625,32 @@ function startTimer() {
     isRunning = true;
     updateTimerButtonsState();
 
+    sessionStartDate = new Date().toISOString().split('T')[0];
+    targetEndTime = Date.now() + (timeLeft * 1000);
+
     timerInterval = setInterval(() => {
+        const now = Date.now();
+        timeLeft = Math.max(0, Math.ceil((targetEndTime - now) / 1000));
+
         if (timeLeft > 0) {
-            timeLeft--;
             updateTimerDisplay();
         } else {
             clearInterval(timerInterval);
             isRunning = false;
+            updateTimerDisplay();
             updateTimerButtonsState();
             handleTimerComplete();
         }
-    }, 1000);
+    }, 250);
 }
 
 function pauseTimer() {
     if (!isRunning) return;
     clearInterval(timerInterval);
     isRunning = false;
+    if (targetEndTime) {
+        timeLeft = Math.max(0, Math.ceil((targetEndTime - Date.now()) / 1000));
+    }
     updateTimerButtonsState();
 }
 
@@ -663,7 +667,7 @@ async function handleTimerComplete() {
     if (timerMode === 'work') {
         const earnedMins = 25;
         const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
+        const dateStr = sessionStartDate || now.toISOString().split('T')[0];
         const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
         const newLog = {
@@ -684,12 +688,10 @@ async function handleTimerComplete() {
             }
         }
 
-        // 紙吹雪エフェクト (ドーパミン演出)
         if (window.confetti) {
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
         }
 
-        // セッション進行
         if (currentSession < 4) {
             timerMode = 'break';
             timeLeft = 5 * 60;
@@ -697,12 +699,10 @@ async function handleTimerComplete() {
             document.getElementById('timerModeText').textContent = '5分 休憩タイム';
             document.getElementById('timerSubText').textContent = '深呼吸してリフレッシュしましょう';
             
-            // 20%の確率で 10分休憩延長チケット獲得
             if (Math.random() < 0.20) {
                 yogaTicketCount++;
             }
         } else {
-            // 4回達成で 30分長休憩チケット獲得
             timerMode = 'longBreak';
             timeLeft = 30 * 60;
             totalTimerSeconds = 30 * 60;
@@ -717,7 +717,6 @@ async function handleTimerComplete() {
         updateDashboard();
 
     } else {
-        // 休憩終了 -> 次の集中へ
         if (timerMode === 'longBreak') {
             currentSession = 1;
         } else {
@@ -731,17 +730,23 @@ async function handleTimerComplete() {
         document.getElementById('timerSubText').textContent = '集中して学習に取り組みましょう';
         document.getElementById('currentSessionNum').textContent = currentSession;
     }
+
+    targetEndTime = null;
+    sessionStartDate = null;
     updateTimerDisplay();
 }
 
-/* アイテム使用処理 */
 async function useCoffeeTicket() {
     if (coffeeTicketCount <= 0) return;
+    if (isRunning) pauseTimer();
+
     coffeeTicketCount--;
     currentSession = 1;
     timerMode = 'work';
     timeLeft = 25 * 60;
     totalTimerSeconds = 25 * 60;
+    targetEndTime = null;
+
     document.getElementById('timerModeText').textContent = '25分 集中タイム';
     document.getElementById('timerSubText').textContent = '☕️長休憩チケット使用：第1セッションからリセット';
     document.getElementById('currentSessionNum').textContent = currentSession;
@@ -751,13 +756,17 @@ async function useCoffeeTicket() {
 }
 
 async function useYogaTicket() {
-    if (yogaTicketCount <= 0 || yogaUsedInCurrentBreak >= 2) {
-        return;
-    }
+    if (yogaTicketCount <= 0 || yogaUsedInCurrentBreak >= 2) return;
+    
     yogaTicketCount--;
     yogaUsedInCurrentBreak++;
     timeLeft += 10 * 60;
     totalTimerSeconds += 10 * 60;
+
+    if (isRunning && targetEndTime) {
+        targetEndTime += 10 * 60 * 1000;
+    }
+
     updateTimerDisplay();
     await saveSettingsAndItemsToCloud();
 }
@@ -779,6 +788,7 @@ function updateInventoryUI() {
     }
 }
 
+/* Supabaseタスク修正: null化 & ID競合修正 */
 async function addTask() {
     const titleInput = document.getElementById('taskTitleInput');
     const minsInput = document.getElementById('taskMinsInput');
@@ -786,17 +796,18 @@ async function addTask() {
     const dueInput = document.getElementById('taskDueInput');
 
     const title = titleInput.value.trim();
-    if (!title) {
-        return;
-    }
+    if (!title) return;
 
     const minutes = parseInt(minsInput.value, 10) || 25;
-    const dueStr = dueInput.value || '';
+    const rawDue = dueInput.value.trim();
+    const dueStr = rawDue ? rawDue : null;
+
+    const localId = Date.now();
 
     const newTask = {
-        id: Date.now(),
-        title,
-        minutes,
+        id: localId,
+        title: title,
+        minutes: minutes,
         subject: subjectSelect.value,
         due: dueStr,
         completed: false
@@ -809,7 +820,17 @@ async function addTask() {
 
     if (supabaseClient) {
         try {
-            await supabaseClient.from('tasks').insert([newTask]);
+            const { data, error } = await supabaseClient.from('tasks').insert([{
+                title: title,
+                minutes: minutes,
+                subject: subjectSelect.value,
+                due: dueStr,
+                completed: false
+            }]).select();
+
+            if (data && data[0] && !error) {
+                newTask.id = data[0].id;
+            }
         } catch (err) {
             console.warn("Task sync failed:", err);
         }
@@ -876,9 +897,11 @@ function renderTaskList() {
         let dueDisplay = '';
         if (t.due) {
             const dueDate = new Date(t.due);
-            dueDisplay = `${dueDate.getMonth()+1}/${dueDate.getDate()} ${String(dueDate.getHours()).padStart(2,'0')}:${String(dueDate.getMinutes()).padStart(2,'0')}`;
-            if (!t.completed && dueDate < now) {
-                isOverdue = true;
+            if (!isNaN(dueDate.getTime())) {
+                dueDisplay = `${dueDate.getMonth()+1}/${dueDate.getDate()} ${String(dueDate.getHours()).padStart(2,'0')}:${String(dueDate.getMinutes()).padStart(2,'0')}`;
+                if (!t.completed && dueDate < now) {
+                    isOverdue = true;
+                }
             }
         }
 
@@ -910,7 +933,6 @@ function renderTaskList() {
     });
 }
 
-/* ストリーク（連続学習日数）計算 */
 function calculateStreak() {
     if (studyLogs.length === 0) return 0;
     const uniqueDates = Array.from(new Set(studyLogs.map(l => l.date))).sort().reverse();
@@ -919,13 +941,12 @@ function calculateStreak() {
     let expectedDate = new Date();
     expectedDate.setHours(0,0,0,0);
 
-    // 最新の学習日が今日または昨日であればストリーク継続判定開始
     const latestDate = new Date(uniqueDates[0]);
     latestDate.setHours(0,0,0,0);
     const diffTime = expectedDate - latestDate;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays > 1) return 0; // 2日以上空いていればストリーク途切れ
+    if (diffDays > 1) return 0;
 
     for (let i = 0; i < uniqueDates.length; i++) {
         const d = new Date(uniqueDates[i]);
@@ -938,7 +959,6 @@ function calculateStreak() {
             streak++;
             expectedDate.setDate(expectedDate.getDate() - 1);
         } else if (i === 0 && diffDays === 1) {
-            // 昨日からスタートしている場合
             streak++;
             expectedDate = new Date(d);
             expectedDate.setDate(expectedDate.getDate() - 1);
@@ -949,7 +969,6 @@ function calculateStreak() {
     return Math.max(1, streak);
 }
 
-/* 本日獲得XP（毎日0時に0 XPスタート）計算関数 */
 function getEffectiveXP() {
     const todayStr = new Date().toISOString().split('T')[0];
     const todayMins = studyLogs.filter(l => l.date === todayStr).reduce((sum, l) => sum + l.minutes, 0);
@@ -982,7 +1001,6 @@ function updateDashboard() {
 
     const streakDays = calculateStreak();
 
-    // UI更新
     const statTotalXP = document.getElementById('statTotalXP');
     if (statTotalXP) statTotalXP.textContent = `${totalXP.toLocaleString()} XP`;
 
@@ -1054,7 +1072,6 @@ function closeRankModal() {
 }
 
 function initCharts() {
-    // 集中推移バーチャート
     const ctxBar = document.getElementById('barChart').getContext('2d');
     barChartInstance = new Chart(ctxBar, {
         type: 'bar',
@@ -1078,7 +1095,6 @@ function initCharts() {
         }
     });
 
-    // 教科別ドーナツチャート
     const ctxDoughnut = document.getElementById('doughnutChart').getContext('2d');
     doughnutChartInstance = new Chart(ctxDoughnut, {
         type: 'doughnut',
@@ -1099,7 +1115,6 @@ function initCharts() {
         }
     });
 
-    // 24時間ゴールデンタイムチャート
     const ctxHourly = document.getElementById('hourlyChart').getContext('2d');
     hourlyChartInstance = new Chart(ctxHourly, {
         type: 'line',
@@ -1181,7 +1196,7 @@ function updateCharts() {
 
     barChartInstance.data.labels = labels;
     barChartInstance.data.datasets[0].data = data;
-    
+
     if (activeUnit === 'pomo') {
         barChartInstance.data.datasets[0].label = 'ポモ数 (25分)';
         barChartInstance.data.datasets[0].backgroundColor = '#f59e0b';
