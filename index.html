@@ -379,9 +379,8 @@
 </div>
 
 <script>
-// 【重要】日本時間（JST）で YYYY-MM-DD を正確に取得する関数
 function getLocalDateString(d = new Date()) {
-    return d.toLocaleDateString('sv-SE'); // YYYY-MM-DD 形式で取得
+    return d.toLocaleDateString('sv-SE');
 }
 
 const SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
@@ -409,6 +408,7 @@ let timerInterval = null;
 let timeLeft = 25 * 60;
 let totalTimerSeconds = 25 * 60;
 let isRunning = false;
+let isCompleting = false; // 重複登録防止フラグ
 let timerMode = 'work'; 
 let currentSession = 1;
 let currentTimerSubject = '算数';
@@ -585,7 +585,9 @@ function startTimer() {
     isRunning = true;
     updateTimerButtonsState();
 
-    sessionStartDate = getLocalDateString(); // 日本時間日付
+    if (!sessionStartDate) {
+        sessionStartDate = getLocalDateString();
+    }
     targetEndTime = Date.now() + (timeLeft * 1000);
 
     timerInterval = setInterval(() => {
@@ -599,7 +601,14 @@ function startTimer() {
             isRunning = false;
             updateTimerDisplay();
             updateTimerButtonsState();
-            handleTimerComplete();
+            
+            // 重複呼び出し防止
+            if (!isCompleting) {
+                isCompleting = true;
+                handleTimerComplete().then(() => {
+                    isCompleting = false;
+                });
+            }
         }
     }, 250);
 }
@@ -694,6 +703,9 @@ async function handleTimerComplete() {
     targetEndTime = null;
     sessionStartDate = null;
     updateTimerDisplay();
+
+    // 【追加】次のモードのタイマーを自動的にスタート
+    startTimer();
 }
 
 async function useCoffeeTicket() {
@@ -922,7 +934,6 @@ function calculateStreak() {
     return Math.max(1, streak);
 }
 
-// 日本時間の日付で本日のXPを集計
 function getEffectiveXP() {
     const todayStr = getLocalDateString();
     const todayMins = studyLogs.filter(l => l.date === todayStr).reduce((sum, l) => sum + l.minutes, 0);
