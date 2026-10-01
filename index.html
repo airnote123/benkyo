@@ -393,11 +393,11 @@ VALUES (
   </div>
 
   <script>
-    // デフォルトのSupabase接続情報（埋め込み）
+    // デフォルトのSupabase接続情報
     const DEFAULT_SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
     const DEFAULT_SUPABASE_KEY = "Sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
 
-    // トースト通知関数（alertの代替）
+    // トースト通知関数
     function showToast(message, type = "success") {
       const toast = document.getElementById("toast");
       const icon = document.getElementById("toastIcon");
@@ -459,6 +459,15 @@ VALUES (
     let currentMaster = masterList[0];
     let supabaseClient = null;
 
+    // Supabase URL整形ヘルパー (/rest/v1/ などの不要なパスを除去)
+    function sanitizeSupabaseUrl(rawUrl) {
+      if (!rawUrl) return "";
+      let clean = rawUrl.trim();
+      clean = clean.replace(/\/rest\/v1\/?$/, "");
+      clean = clean.replace(/\/$/, "");
+      return clean;
+    }
+
     // 初期化ハンドラ
     window.onload = async () => {
       initSupabase();
@@ -471,9 +480,10 @@ VALUES (
 
     // Supabase クライアント初期化
     function initSupabase() {
-      const url = localStorage.getItem("sb_url") || DEFAULT_SUPABASE_URL;
-      const key = localStorage.getItem("sb_key") || DEFAULT_SUPABASE_KEY;
-      
+      let rawUrl = localStorage.getItem("sb_url") || DEFAULT_SUPABASE_URL;
+      const key = (localStorage.getItem("sb_key") || DEFAULT_SUPABASE_KEY).trim();
+      const url = sanitizeSupabaseUrl(rawUrl);
+
       document.getElementById("supabaseUrlInput").value = url;
       document.getElementById("supabaseKeyInput").value = key;
 
@@ -501,74 +511,14 @@ VALUES (
           const { data, error } = await supabaseClient.from("past_paper_masters").select("*");
           if (!error && data && data.length > 0) {
             masterList = [...data];
+            currentMaster = masterList[0];
             return;
           }
         } catch(e) { console.warn("Supabase fetch failed, fallback to local:", e); }
       }
 
       masterList = [...initialMasters, ...customLocalList];
-    }
-      },
-      {
-        id: "kaisei_2026",
-        schoolName: "開成中学校",
-        year: 2026,
-        fullScore: 310,
-        passMin: 205.0,
-        passAvg: 222.7,
-        totalAvg: 193.4,
-        subjects: {
-          japanese: { name: "国語", max: 85, avg: 50.3, passAvg: 57.0 },
-          math:     { name: "算数", max: 85, avg: 41.6, passAvg: 54.8 },
-          society:  { name: "社会", max: 70, avg: 52.8, passAvg: 55.9 },
-          science:  { name: "理科", max: 70, avg: 48.7, passAvg: 55.0 }
-        }
-      }
-    ];
-
-    let masterList = [...initialMasters];
-    let currentMaster = masterList[0];
-    let supabaseClient = null;
-
-    // 初期化ハンドラ
-    window.onload = async () => {
-      initSupabase();
-      await loadMasters();
-      renderMasterSelect();
-      renderSubjectInputs();
-      calculateAll();
-      loadHistory();
-    };
-
-    // Supabase クライアント初期化
-    function initSupabase() {
-      const url = localStorage.getItem("sb_url");
-      const key = localStorage.getItem("sb_key");
-      if (url && key && window.supabase) {
-        supabaseClient = window.supabase.createClient(url, key);
-        document.getElementById("supabaseUrlInput").value = url;
-        document.getElementById("supabaseKeyInput").value = key;
-      }
-    }
-
-    // マスターデータ読み込み
-    async function loadMasters() {
-      const localCustom = localStorage.getItem("custom_masters");
-      if (localCustom) {
-        try {
-          const parsed = JSON.parse(localCustom);
-          masterList = [...initialMasters, ...parsed];
-        } catch(e) { console.error(e); }
-      }
-
-      if (supabaseClient) {
-        try {
-          const { data, error } = await supabaseClient.from("past_paper_masters").select("*");
-          if (!error && data && data.length > 0) {
-            masterList = [...initialMasters, ...data];
-          }
-        } catch(e) { console.warn("Supabase fetch failed, fallback to local:", e); }
-      }
+      currentMaster = masterList[0];
     }
 
     // ドロップダウン更新
@@ -838,18 +788,19 @@ VALUES (
         total_score: totalScore,
         estimated_dev: totalDev,
         probability: probText,
-        created_at: new Date().toLocaleString()
+        created_at: new Date().toISOString()
       };
 
       if (supabaseClient) {
         try {
-          await supabaseClient.from("past_paper_results").insert([record]);
-        } catch(e) { console.warn("Supabase insert error:", e); }
+          const { error } = await supabaseClient.from("past_paper_results").insert([record]);
+          if (error) console.warn("Supabase insert error:", error);
+        } catch(e) { console.warn("Supabase insert exception:", e); }
       }
 
       // ローカルストレージ保存
       const history = JSON.parse(localStorage.getItem("paper_history") || "[]");
-      history.unshift(record);
+      history.unshift({ ...record, created_at: new Date().toLocaleString() });
       localStorage.setItem("paper_history", JSON.stringify(history));
 
       showToast("演習結果を保存しました。");
@@ -873,7 +824,7 @@ VALUES (
               probability: d.probability
             }));
           }
-        } catch(e) { console.warn(e); }
+        } catch(e) { console.warn("Load history failed:", e); }
       }
 
       if (history.length === 0) {
@@ -906,13 +857,21 @@ VALUES (
     function closeConfigModal() { document.getElementById("configModal").classList.add("hidden"); }
     
     function saveSupabaseConfig() {
-      const url = document.getElementById("supabaseUrlInput").value.trim();
+      const rawUrl = document.getElementById("supabaseUrlInput").value;
       const key = document.getElementById("supabaseKeyInput").value.trim();
+      const url = sanitizeSupabaseUrl(rawUrl);
+
       localStorage.setItem("sb_url", url);
       localStorage.setItem("sb_key", key);
       initSupabase();
       closeConfigModal();
       showToast("Supabase設定を更新しました。");
+      loadMasters().then(() => {
+        renderMasterSelect();
+        renderSubjectInputs();
+        calculateAll();
+        loadHistory();
+      });
     }
 
     function copySQL() {
@@ -929,7 +888,7 @@ VALUES (
     function openAddMasterModal() { document.getElementById("addMasterModal").classList.remove("hidden"); }
     function closeAddMasterModal() { document.getElementById("addMasterModal").classList.add("hidden"); }
 
-    function submitNewMaster(e) {
+    async function submitNewMaster(e) {
       e.preventDefault();
       const newM = {
         id: `custom_${Date.now()}`,
@@ -953,7 +912,9 @@ VALUES (
       localStorage.setItem("custom_masters", JSON.stringify(customMasters));
 
       if (supabaseClient) {
-        supabaseClient.from("past_paper_masters").insert([newM]).then();
+        try {
+          await supabaseClient.from("past_paper_masters").insert([newM]);
+        } catch(err) { console.warn(err); }
       }
 
       currentMaster = newM;
