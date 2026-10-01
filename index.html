@@ -1,297 +1,384 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>過去問スキャン・自動登録パイプライン</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>開成過去問 合格可能性判定マイページ</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+body {
+font-family: 'Noto Sans JP', sans-serif;
+}
+</style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
-  <div class="max-w-2xl mx-auto space-y-6">
-    <header class="border-b border-slate-700 pb-4">
-      <h1 class="text-xl font-bold text-emerald-400">過去問スキャン・自動登録パイプライン</h1>
-      <p class="text-xs text-slate-400 mt-1">1枚（A4）なら単体保存、2枚（P1/P2）なら自動結合してSupabaseへ登録します</p>
-    </header>
-
-    <main class="space-y-4">
-      <div id="drop-zone" class="border-2 border-dashed border-slate-600 hover:border-emerald-500 rounded-xl p-8 text-center bg-slate-800/50 cursor-pointer transition-colors">
-        <input type="file" id="file-input" accept="image/*,.pdf" multiple class="hidden">
-        <div class="space-y-2">
-          <svg class="w-10 h-10 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-          <p class="text-sm font-medium">ファイルを選択（スキャンPDFまたは画像1〜2枚）</p>
-          <p class="text-xs text-slate-500">タップして「ファイル」アプリから選択</p>
-        </div>
-      </div>
-
-      <!-- ログ表示カード -->
-      <div id="status-card" class="hidden bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
-        <div class="flex items-center justify-between">
-          <span id="status-title" class="text-sm font-bold text-slate-200">処理中...</span>
-          <span id="status-spinner" class="animate-spin text-emerald-400">🌀</span>
-        </div>
-        <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
-          <div id="progress-bar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
-        </div>
-        <p id="status-log" class="text-xs font-mono text-slate-400 whitespace-pre-line"></p>
-      </div>
-    </main>
-  </div>
-
-  <script>
-    // --- 1. Supabase 設定 ---
-    const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-    const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    const fileInput = document.getElementById('file-input');
-    const dropZone = document.getElementById('drop-zone');
-    const statusCard = document.getElementById('status-card');
-    const statusTitle = document.getElementById('status-title');
-    const statusLog = document.getElementById('status-log');
-    const progressBar = document.getElementById('progress-bar');
-    const statusSpinner = document.getElementById('status-spinner');
-
-    dropZone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files)));
-
-    // --- 2. メインパイプライン ---
-    async function handleFiles(files) {
-      if (files.length === 0) return;
-      resetStatus();
-      showStatus('ファイル読み込み中...', 10, 'ファイルを受領しました');
-
-      try {
-        let rawImages = [];
-
-        // PDF解体 または 画像読み込み
-        if (files.length === 1 && files[0].type === 'application/pdf') {
-          log('PDFファイルを検知。各ページを取り出し中...');
-          rawImages = await extractImagesFromPdf(files[0]);
-        } else {
-          log('画像ファイルを検知。読み込み中...');
-          rawImages = await Promise.all(files.map(loadImageFile));
-        }
-
-        if (rawImages.length === 0 || rawImages.length > 2) {
-          throw new Error('処理できるのは1枚（A4単体）または2枚（見開きペア）です。');
-        }
-
-        showStatus('QRコード解析中（別スキャン処理）...', 30, '専用の読み取りキャンバスで解析しています');
-
-        // 【改善】QR解析を独立して実行し、回転補正済みの高画質画像とメタデータを取得
-        const processedPages = await Promise.all(rawImages.map(parseAndOrientImage));
-
-        let finalBlob = null;
-        let meta = {};
-
-        if (processedPages.length === 1) {
-          // --- 1枚物（A4単体）処理 ---
-          const single = processedPages[0];
-          meta = single.meta;
-          log(`1枚構成を検知: 【${meta.school}】${meta.year}年 ${meta.subject} (生徒ID: ${meta.student_id})`);
-          showStatus('画像変換中...', 60, '単体保存の準備をしています');
-          finalBlob = await imageToBlob(single.img);
-
-        } else if (processedPages.length === 2) {
-          // --- 2枚物（見開きA3/B4結合）処理 ---
-          const p1 = processedPages.find(p => p.meta.page === 'P1');
-          const p2 = processedPages.find(p => p.meta.page === 'P2');
-
-          if (!p1 || !p2) {
-            throw new Error('P1（左）とP2（右）のペアを識別できませんでした。QRの内容を確認してください。');
-          }
-
-          meta = p1.meta; // 共通メタデータ
-          log(`2枚（見開き）構成を検知: 【${meta.school}】${meta.year}年 ${meta.subject}`);
-          showStatus('画像を横結合中...', 60, 'P1（左）とP2（右）を合体しています');
-          finalBlob = await createCombinedBlob(p1.img, p2.img);
-        }
-
-        showStatus('Supabaseへ登録中...', 85, 'Storageへの送信とDB更新を行っています');
-
-        // Supabaseへ保存
-        const timestamp = Date.now();
-        const filePath = `${meta.school}/${meta.year}/${meta.subject}/${meta.student_id}_${timestamp}.png`;
-
-        const { error: storageError } = await supabase.storage
-          .from('answers')
-          .upload(filePath, finalBlob, { contentType: 'image/png' });
-
-        if (storageError) throw storageError;
-
-        const { data: urlData } = supabase.storage.from('answers').getPublicUrl(filePath);
-
-        const { error: dbError } = await supabase.from('answers').insert({
-          school: meta.school,
-          year: parseInt(meta.year),
-          subject: meta.subject,
-          student_id: meta.student_id,
-          image_url: urlData.publicUrl,
-          status: 'ungraded'
-        });
-
-        if (dbError) throw dbError;
-
-        showStatus('完了しました！', 100, `登録が完了しました。\n保存先: ${filePath}\n採点システムへ自動連携されます。`, false);
-
-      } catch (err) {
-        console.error(err);
-        showStatus('エラーが発生しました', 0, `[ERROR] ${err.message}`, false, true);
-      } finally {
-        fileInput.value = '';
-      }
-    }
-
-    // --- 3. QRコード独立解析（コア改善部分） ---
-    async function parseAndOrientImage(img) {
-      // 1. QR検出専用の別Canvasを作成（高画質画像のまま検出すると重いため適正サイズに調整して読取り）
-      const scanCanvas = document.createElement('canvas');
-      const scanCtx = scanCanvas.getContext('2d');
-      
-      // 解析用には長辺最大1500px程度にリサイズして高速化・認識率向上
-      const maxDim = 1500;
-      let scale = 1.0;
-      if (Math.max(img.width, img.height) > maxDim) {
-        scale = maxDim / Math.max(img.width, img.height);
-      }
-      scanCanvas.width = img.width * scale;
-      scanCanvas.height = img.height * scale;
-      scanCtx.drawImage(img, 0, 0, scanCanvas.width, scanCanvas.height);
-
-      let imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-      let code = jsQR(imageData.data, imageData.width, imageData.height);
-
-      let rotationNeeded = 0; // 0度または180度
-
-      // 読めなかった場合、180度回転して再チェック
-      if (!code) {
-        scanCtx.clearRect(0, 0, scanCanvas.width, scanCanvas.height);
-        scanCtx.translate(scanCanvas.width, scanCanvas.height);
-        scanCtx.rotate(Math.PI);
-        scanCtx.drawImage(img, 0, 0, scanCanvas.width, scanCanvas.height);
-        imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-        code = jsQR(imageData.data, imageData.width, imageData.height);
-        if (code) {
-          rotationNeeded = 180;
-        }
-      }
-
-      if (!code) {
-        throw new Error('QRコードが検出できませんでした。印刷が不鮮明か、向きが斜めすぎる可能性があります。');
-      }
-
-      // QRデータパース
-      let meta = {};
-      try {
-        meta = JSON.parse(code.data);
-      } catch (e) {
-        throw new Error(`QRデータの形式が不正です (JSON形式である必要があります): ${code.data}`);
-      }
-
-      // 2. 元の「高画質画像」側を正しい向きに回転補正して出力
-      const outCanvas = document.createElement('canvas');
-      const outCtx = outCanvas.getContext('2d');
-      outCanvas.width = img.width;
-      outCanvas.height = img.height;
-
-      if (rotationNeeded === 180) {
-        outCtx.translate(img.width, img.height);
-        outCtx.rotate(Math.PI);
-      }
-      outCtx.drawImage(img, 0, 0);
-
-      const orientedImg = new Image();
-      orientedImg.src = outCanvas.toDataURL('image/png');
-      await new Promise(r => orientedImg.onload = r);
-
-      return { img: orientedImg, meta: meta };
-    }
-
-    // --- 4. 画像変換ユーティリティ ---
-    function imageToBlob(img) {
-      return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((blob) => resolve(blob), 'image/png');
-      });
-    }
-
-    function createCombinedBlob(imgP1, imgP2) {
-      return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = imgP1.width + imgP2.width;
-        canvas.height = Math.max(imgP1.height, imgP2.height);
-
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // 左にP1、右にP2を描画
-        ctx.drawImage(imgP1, 0, 0);
-        ctx.drawImage(imgP2, imgP1.width, 0);
-
-        canvas.toBlob((blob) => resolve(blob), 'image/png');
-      });
-    }
-
-    async function extractImagesFromPdf(file) {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const images = [];
-
-      for (let i = 1; i <= Math.min(2, pdf.numPages); i++) {
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-        
-        const img = new Image();
-        img.src = canvas.toDataURL('image/png');
-        await new Promise(r => img.onload = r);
-        images.push(img);
-      }
-      return images;
-    }
-
-    function loadImageFile(file) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = URL.createObjectURL(file);
-      });
-    }
-
-    function resetStatus() {
-      statusLog.textContent = '';
-      statusCard.classList.add('hidden');
-    }
-
-    function showStatus(title, percent, logText, isSpinning = true, isError = false) {
-      statusCard.classList.remove('hidden');
-      statusTitle.textContent = title;
-      statusTitle.className = `text-sm font-bold ${isError ? 'text-rose-400' : 'text-slate-200'}`;
-      progressBar.style.width = `${percent}%`;
-      progressBar.className = `h-full transition-all duration-300 ${isError ? 'bg-rose-500' : 'bg-emerald-500'}`;
-      statusSpinner.style.display = isSpinning ? 'inline-block' : 'none';
-      if (logText) log(logText);
-    }
-
-    function log(text) {
-      statusLog.textContent += `${text}\n`;
-    }
-  </script>
+<body class="bg-slate-100 min-h-screen text-slate-800 pb-12">
+<!-- Header -->
+<header class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+<div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="bg-amber-500 text-slate-900 font-black p-2 rounded-lg text-sm tracking-wider">
+MY PAGE
+</div>
+<div>
+<h1 class="font-bold text-lg leading-tight">過去問演習 合格判定ダッシュボード</h1>
+<p class="text-xs text-slate-400">開成中学校 過去問分析システム</p>
+</div>
+</div>
+<div class="flex items-center gap-2 text-xs text-slate-300">
+<i class="fa-solid fa-user-circle text-lg"></i>
+<span class="hidden sm:inline font-medium">生徒マイページ</span>
+</div>
+</div>
+</header>
+<!-- Main Container -->
+<main class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+<!-- Top Controller: School & Year Select -->
+<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl">
+<i class="fa-solid fa-school"></i>
+</div>
+<div>
+<span class="text-xs text-slate-400 font-bold block">対象校 / 対象年度</span>
+<div class="flex items-center gap-2">
+<span class="font-black text-slate-800 text-lg">開成中学校</span>
+<select id="yearSelect" onchange="switchYear()" class="bg-slate-100 border border-slate-300 text-slate-800 font-bold text-sm rounded-lg px-3 py-1 focus:ring-2 focus:ring-blue-500 outline-none">
+<option value="2025" selected>2025年度 (令和7)</option>
+<option value="2026">2026年度 (令和8)</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Quick Benchmark Stats -->
+<div class="flex items-center gap-6 text-xs bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+<div class="text-center">
+<span class="text-slate-400 block font-bold">4科満点</span>
+<span class="font-black text-slate-700 text-sm" id="bmFullScore">310点</span>
+</div>
+<div class="h-6 w-px bg-slate-200"></div>
+<div class="text-center">
+<span class="text-slate-400 block font-bold">受験者平均</span>
+<span class="font-black text-slate-700 text-sm" id="bmAvgScore">192.2点</span>
+</div>
+<div class="h-6 w-px bg-slate-200"></div>
+<div class="text-center">
+<span class="text-slate-400 block font-bold">合格最低点</span>
+<span class="font-black text-rose-600 text-sm" id="bmMinScore">202点</span>
+</div>
+</div>
+</div>
+<!-- Main Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column: Score Input Form -->
+<div class="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-center border-b pb-3 mb-4">
+<h2 class="font-black text-slate-800 flex items-center gap-2">
+<i class="fa-solid fa-pen-to-square text-blue-600"></i>
+キミの得点を入力
+</h2>
+<span class="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-bold">自動計算中</span>
+</div>
+<form id="scoreForm" oninput="calculateResults()" class="space-y-4">
+<!-- 国語 -->
+<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+<div>
+<label class="font-bold text-slate-700 block text-sm">国語</label>
+<span class="text-xs text-slate-400">満点 85点 / 平均 <span id="avg_japanese">40.4</span>点</span>
+</div>
+<div class="flex items-center gap-2">
+<input type="number" id="input_japanese" min="0" max="85" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+<span class="text-xs font-bold text-slate-500">点</span>
+</div>
+</div>
+<!-- 算数 -->
+<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+<div>
+<label class="font-bold text-slate-700 block text-sm">算数</label>
+<span class="text-xs text-slate-400">満点 85点 / 平均 <span id="avg_math">46.9</span>点</span>
+</div>
+<div class="flex items-center gap-2">
+<input type="number" id="input_math" min="0" max="85" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+<span class="text-xs font-bold text-slate-500">点</span>
+</div>
+</div>
+<!-- 社会 -->
+<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+<div>
+<label class="font-bold text-slate-700 block text-sm">社会</label>
+<span class="text-xs text-slate-400">満点 70点 / 平均 <span id="avg_society">52.9</span>点</span>
+</div>
+<div class="flex items-center gap-2">
+<input type="number" id="input_society" min="0" max="70" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+<span class="text-xs font-bold text-slate-500">点</span>
+</div>
+</div>
+<!-- 理科 -->
+<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+<div>
+<label class="font-bold text-slate-700 block text-sm">理科</label>
+<span class="text-xs text-slate-400">満点 70点 / 平均 <span id="avg_science">52.0</span>点</span>
+</div>
+<div class="flex items-center gap-2">
+<input type="number" id="input_science" min="0" max="70" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
+<span class="text-xs font-bold text-slate-500">点</span>
+</div>
+</div>
+</form>
+</div>
+<button onclick="resetScores()" class="mt-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2">
+<i class="fa-solid fa-rotate-left"></i> 入力内容をリセット
+</button>
+</div>
+<!-- Right Column: Results & Analysis -->
+<div class="lg:col-span-7 space-y-6">
+<!-- Probability Hero Card -->
+<div id="resultCard" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden transition-all duration-300">
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
+<div>
+<span class="text-xs font-bold text-slate-400 block mb-1">過去問判定結果</span>
+<div class="flex items-baseline gap-2">
+<h3 class="text-4xl font-black text-slate-800" id="probabilityText">0%</h3>
+<span class="text-xs text-slate-500 font-bold">（合格可能性）</span>
+</div>
+</div>
+<!-- Rank Badge -->
+<div class="flex items-center gap-3">
+<div id="rankBadge" class="bg-slate-200 text-slate-600 text-3xl font-black px-5 py-2 rounded-2xl shadow-inner tracking-wider">
+--
+</div>
+<div>
+<span class="text-xs font-bold text-slate-400 block">総合判定</span>
+<span id="rankTitle" class="text-sm font-bold text-slate-700">点数を入力してください</span>
+</div>
+</div>
+</div>
+<!-- Total Score Summary Grid -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-6 text-center">
+<div class="bg-slate-50 p-3 rounded-xl">
+<span class="text-xs text-slate-400 font-bold block">4科合計点</span>
+<span class="text-2xl font-black text-slate-800" id="displayTotalScore">0</span>
+<span class="text-[10px] text-slate-400 block">/ 310点満点</span>
+</div>
+<div class="bg-slate-50 p-3 rounded-xl">
+<span class="text-xs text-slate-400 font-bold block">合格最低点との差</span>
+<span class="text-2xl font-black text-slate-800" id="displayDiffScore">--</span>
+<span class="text-[10px] text-slate-400 block" id="diffSubtitle">ボーダー: 202点</span>
+</div>
+<div class="bg-slate-50 p-3 rounded-xl col-span-2 sm:col-span-1">
+<span class="text-xs text-slate-400 font-bold block">合格者平均との差</span>
+<span class="text-2xl font-black text-slate-800" id="displayAvgDiffScore">--</span>
+<span class="text-[10px] text-slate-400 block" id="avgDiffSubtitle">平均: 219.5点</span>
+</div>
+</div>
+</div>
+<!-- Subject Breakdown Bars -->
+<div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+<h3 class="font-bold text-sm text-slate-700 flex items-center justify-between">
+<span><i class="fa-solid fa-chart-simple text-blue-600 mr-2"></i>科目別 得点比較</span>
+<span class="text-xs text-slate-400 font-normal">■ キミの得点 / ■ 受験者平均 / ■ 合格者平均</span>
+</h3>
+<div class="space-y-4 pt-2" id="subjectBarContainer">
+<!-- Subject Bars will be injected via JS -->
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Script -->
+<script>
+// 開成中学校 過去問データベース
+const masterData = {
+"2025": {
+yearName: "2025年度 (令和7)",
+fullScore: 310,
+passMin: 202,
+passAvg: 219.5,
+totalAvg: 192.2,
+subjects: {
+japanese: { name: "国語", max: 85, avg: 40.4, passAvg: 50.1 },
+math:     { name: "算数", max: 85, avg: 46.9, passAvg: 55.2 },
+society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
+science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
+}
+},
+"2026": {
+yearName: "2026年度 (令和8)",
+fullScore: 310,
+passMin: 205,
+passAvg: 222.7,
+totalAvg: 193.4,
+subjects: {
+japanese: { name: "国語", max: 85, avg: 50.3, passAvg: 57.0 },
+math:     { name: "算数", max: 85, avg: 41.6, passAvg: 54.8 },
+society:  { name: "社会", max: 70, avg: 52.8, passAvg: 55.9 },
+science:  { name: "理科", max: 70, avg: 48.7, passAvg: 55.0 }
+}
+}
+};
+let currentYear = "2025";
+// 初期化
+window.onload = () => {
+switchYear();
+};
+// 年度切り替え
+function switchYear() {
+currentYear = document.getElementById("yearSelect").value;
+const data = masterData[currentYear];
+// ベンチマーク更新
+document.getElementById("bmFullScore").innerText = ⁠${data.fullScore}点⁠;
+document.getElementById("bmAvgScore").innerText = ⁠${data.totalAvg}点⁠;
+document.getElementById("bmMinScore").innerText = ⁠${data.passMin}点⁠;
+// 各科目ラベル更新
+document.getElementById("avg_japanese").innerText = data.subjects.japanese.avg;
+document.getElementById("avg_math").innerText = data.subjects.math.avg;
+document.getElementById("avg_society").innerText = data.subjects.society.avg;
+document.getElementById("avg_science").innerText = data.subjects.science.avg;
+// 再計算
+calculateResults();
+}
+// リセット
+function resetScores() {
+document.getElementById("input_japanese").value = "";
+document.getElementById("input_math").value = "";
+document.getElementById("input_society").value = "";
+document.getElementById("input_science").value = "";
+calculateResults();
+}
+// メイン計算処理
+function calculateResults() {
+const data = masterData[currentYear];
+// 得点取得
+const scores = {
+japanese: parseFloat(document.getElementById("input_japanese").value) || 0,
+math:     parseFloat(document.getElementById("input_math").value) || 0,
+society:  parseFloat(document.getElementById("input_society").value) || 0,
+science:  parseFloat(document.getElementById("input_science").value) || 0
+};
+// 合計点
+const totalScore = scores.japanese + scores.math + scores.society + scores.science;
+// 入力があるかチェック
+const hasInput = ["japanese", "math", "society", "science"].some(
+s => document.getElementById(⁠input_${s}⁠).value !== ""
+);
+// 合格可能性(%) 計算ロジック
+let probability = 0;
+let rank = "--";
+let rankTitle = "未入力";
+let badgeClass = "bg-slate-200 text-slate-600";
+if (hasInput) {
+if (totalScore >= data.passAvg) {
+// 合格者平均以上: 80% 〜 95%
+const extra = ((totalScore - data.passAvg) / (data.fullScore - data.passAvg)) * 15;
+probability = Math.min(95, Math.round(80 + extra));
+} else if (totalScore >= data.passMin) {
+// 合格最低点 〜 合格者平均: 50% 〜 80%
+const ratio = (totalScore - data.passMin) / (data.passAvg - data.passMin);
+probability = Math.round(50 + ratio * 30);
+} else if (totalScore >= data.totalAvg) {
+// 受験者平均 〜 合格最低点: 30% 〜 50%
+const ratio = (totalScore - data.totalAvg) / (data.passMin - data.totalAvg);
+probability = Math.round(30 + ratio * 20);
+} else {
+// 受験者平均未満: 10% 〜 30%
+const ratio = totalScore / data.totalAvg;
+probability = Math.max(10, Math.round(ratio * 30));
+}
+// ランク割り振りと見栄え
+if (probability >= 80) {
+rank = "A";
+rankTitle = "合格安全圏 (確実性が高い)";
+badgeClass = "bg-emerald-500 text-white shadow-emerald-200";
+} else if (probability >= 70) {
+rank = "B";
+rankTitle = "合格圏 (有望)";
+badgeClass = "bg-teal-500 text-white shadow-teal-200";
+} else if (probability >= 50) {
+rank = "C";
+rankTitle = "ボーダーライン (勝負所)";
+badgeClass = "bg-amber-500 text-white shadow-amber-200";
+} else if (probability >= 30) {
+rank = "D";
+rankTitle = "挑戦圏 (あと一歩)";
+badgeClass = "bg-orange-500 text-white shadow-orange-200";
+} else {
+rank = "E";
+rankTitle = "再強化圏 (基礎固めが必要)";
+badgeClass = "bg-rose-500 text-white shadow-rose-200";
+}
+}
+// UI反映：可能性 & ランク
+document.getElementById("probabilityText").innerText = hasInput ? ⁠${probability}%⁠ : "0%";
+document.getElementById("rankBadge").innerText = rank;
+document.getElementById("rankBadge").className = ⁠text-3xl font-black px-5 py-2 rounded-2xl shadow-md transition-all duration-300 ${badgeClass}⁠;
+document.getElementById("rankTitle").innerText = rankTitle;
+// 4科合計
+document.getElementById("displayTotalScore").innerText = totalScore;
+// 最低点との差
+const diffMin = totalScore - data.passMin;
+const diffMinElem = document.getElementById("displayDiffScore");
+if (!hasInput) {
+diffMinElem.innerText = "--";
+diffMinElem.className = "text-2xl font-black text-slate-800";
+} else if (diffMin >= 0) {
+diffMinElem.innerText = ⁠+${diffMin.toFixed(1)}⁠;
+diffMinElem.className = "text-2xl font-black text-emerald-600";
+} else {
+diffMinElem.innerText = ⁠${diffMin.toFixed(1)}⁠;
+diffMinElem.className = "text-2xl font-black text-rose-600";
+}
+document.getElementById("diffSubtitle").innerText = ⁠最低点: ${data.passMin}点⁠;
+// 平均点との差
+const diffAvg = totalScore - data.passAvg;
+const diffAvgElem = document.getElementById("displayAvgDiffScore");
+if (!hasInput) {
+diffAvgElem.innerText = "--";
+diffAvgElem.className = "text-2xl font-black text-slate-800";
+} else if (diffAvg >= 0) {
+diffAvgElem.innerText = ⁠+${diffAvg.toFixed(1)}⁠;
+diffAvgElem.className = "text-2xl font-black text-emerald-600";
+} else {
+diffAvgElem.innerText = ⁠${diffAvg.toFixed(1)}⁠;
+diffAvgElem.className = "text-2xl font-black text-slate-600";
+}
+document.getElementById("avgDiffSubtitle").innerText = ⁠合格平均: ${data.passAvg}点⁠;
+// 科目別バー描画
+renderSubjectBars(scores, data);
+}
+// 科目別バーの動的生成
+function renderSubjectBars(scores, data) {
+const container = document.getElementById("subjectBarContainer");
+container.innerHTML = "";
+Object.keys(data.subjects).forEach(key => {
+const sub = data.subjects[key];
+const userScore = scores[key];
+const userPercent = (userScore / sub.max) * 100;
+const avgPercent = (sub.avg / sub.max) * 100;
+const passAvgPercent = (sub.passAvg / sub.max) * 100;
+const html = `
+<div class="space-y-1 text-xs">
+<div class="flex justify-between font-bold text-slate-700">
+<span>￼{sub.max}点)</span></span>
+<span>
+<strong class="text-blue-600 font-black text-sm">${userScore}</strong>点
+<span class="text-slate-400 font-normal">/ 受験者平均 ${sub.avg}点 / 合格平均 ${sub.passAvg}点</span>
+</span>
+</div>
+<div class="relative w-full h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+<!-- 受験者平均マーカー (灰) -->
+<div class="absolute top-0 bottom-0 bg-slate-300 opacity-60" style="width: ${avgPercent}%;"></div>
+<!-- 合格者平均ライン (縦線) -->
+<div class="absolute top-0 bottom-0 w-0.5 bg-amber-500 z-10" style="left: ${passAvgPercent}%;"></div>
+<!-- キミの得点バー (青) -->
+<div class="absolute top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-300 opacity-90" style="width: ${userPercent}%;"></div>
+</div>
+</div>
+`;
+container.innerHTML += html;
+});
+}
+</script>
 </body>
 </html>
