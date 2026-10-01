@@ -35,11 +35,49 @@
           <p class="text-xs text-slate-400">Supabase リアルタイム連動マイページ</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 text-xs text-slate-400 font-mono">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Supabase Connected
+      <div class="flex items-center gap-3">
+        <button onclick="openConfigModal()" class="bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-gear text-amber-400"></i> API設定
+        </button>
+        <div id="connectionStatus" class="flex items-center gap-2 text-xs text-slate-400 font-mono">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Connecting...
+        </div>
       </div>
     </div>
   </header>
+
+  <!-- Supabase Config Modal -->
+  <div id="configModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-database text-blue-600"></i> Supabase 接続設定
+        </h3>
+        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+      </div>
+      <p class="text-xs text-slate-500">
+        Supabaseダッシュボードの <b>Project Settings &gt; API</b> から取得した <b>URL</b> と <b>anon (public) API key</b> を入力してください。
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Supabase URL</label>
+          <input type="text" id="cfgUrl" placeholder="https://xxx.supabase.co" class="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Supabase anon Key (API Key)</label>
+          <textarea id="cfgKey" rows="3" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." class="w-full text-xs font-mono bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="saveSupabaseConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition">
+          保存して再接続
+        </button>
+        <button onclick="resetSupabaseConfig()" class="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition">
+          リセット
+        </button>
+      </div>
+    </div>
+  </div>
 
   <main class="max-w-6xl mx-auto px-4 pt-6 space-y-6">
 
@@ -253,12 +291,26 @@
   </main>
 
   <script>
-    // 埋め込み済みの Supabase 接続情報
-    const SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
-    const SUPABASE_KEY = "Sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
+    // デフォルト情報
+    const DEFAULT_SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
+    const DEFAULT_SUPABASE_KEY = "Sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
 
-    // Supabase クライアントの初期化
-    const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+    // localStorageから接続情報を取得（なければデフォルト）
+    let currentUrl = localStorage.getItem("sp_url") || DEFAULT_SUPABASE_URL;
+    let currentKey = localStorage.getItem("sp_key") || DEFAULT_SUPABASE_KEY;
+
+    // Supabase クライアントの初期化関数
+    let supabaseClient = null;
+    function initSupabase() {
+      if (window.supabase && currentUrl && currentKey) {
+        try {
+          supabaseClient = window.supabase.createClient(currentUrl, currentKey);
+        } catch(e) {
+          console.error("Supabase init error:", e);
+          supabaseClient = null;
+        }
+      }
+    }
 
     let masterList = [];
     let currentMaster = null;
@@ -285,21 +337,75 @@
       setTimeout(() => {
         toast.classList.remove("translate-y-0", "opacity-100");
         toast.classList.add("translate-y-20", "opacity-0");
-      }, 3000);
+      }, 3500);
+    }
+
+    // 設定モーダル制御
+    function openConfigModal() {
+      document.getElementById("cfgUrl").value = currentUrl;
+      document.getElementById("cfgKey").value = currentKey;
+      document.getElementById("configModal").classList.remove("hidden");
+    }
+
+    function closeConfigModal() {
+      document.getElementById("configModal").classList.add("hidden");
+    }
+
+    function saveSupabaseConfig() {
+      const u = document.getElementById("cfgUrl").value.trim();
+      const k = document.getElementById("cfgKey").value.trim();
+      if (!u || !k) {
+        showToast("URLとAPI Keyを入力してください", "error");
+        return;
+      }
+      localStorage.setItem("sp_url", u);
+      localStorage.setItem("sp_key", k);
+      currentUrl = u;
+      currentKey = k;
+      initSupabase();
+      closeConfigModal();
+      showToast("設定を保存しました。再接続します...");
+      fetchMastersFromSupabase();
+      loadHistoryFromSupabase();
+    }
+
+    function resetSupabaseConfig() {
+      localStorage.removeItem("sp_url");
+      localStorage.removeItem("sp_key");
+      currentUrl = DEFAULT_SUPABASE_URL;
+      currentKey = DEFAULT_SUPABASE_KEY;
+      initSupabase();
+      closeConfigModal();
+      showToast("初期設定にリセットしました");
+      fetchMastersFromSupabase();
+    }
+
+    function updateStatusUI(status, message) {
+      const statusContainer = document.getElementById("connectionStatus");
+      if (status === "connected") {
+        statusContainer.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> <span class="text-emerald-400">Supabase Connected</span>`;
+      } else if (status === "error") {
+        statusContainer.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-500"></span> <span class="text-rose-400">${message || '接続エラー'}</span>`;
+      } else {
+        statusContainer.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span> <span class="text-amber-300">${message || 'データなし'}</span>`;
+      }
     }
 
     // 画面初期化ハンドラ
     window.onload = async () => {
-      if (!supabaseClient) {
-        showToast("Supabaseクライアントの初期化に失敗しました", "error");
-        return;
-      }
+      initSupabase();
       await fetchMastersFromSupabase();
       await loadHistoryFromSupabase();
     };
 
-    // Supabaseからマスターデータを直接取得
+    // Supabaseからマスターデータを直接取得（サンプルデータへのフォールバックを廃止）
     async function fetchMastersFromSupabase() {
+      if (!supabaseClient) {
+        updateStatusUI("error", "未接続");
+        showEmptyMastersUI("Supabaseに接続されていません。右上の「API設定」から接続情報を入力してください。");
+        return;
+      }
+
       try {
         const { data, error } = await supabaseClient
           .from("past_paper_masters")
@@ -308,19 +414,26 @@
 
         if (error) {
           console.error("Supabase fetch masters error:", error);
-          showToast("マスターデータの取得に失敗しました", "error");
+          if (error.code === "PGRST301" || error.status === 401 || (error.message && error.message.includes("Invalid API key"))) {
+            updateStatusUI("error", "Auth Error (401)");
+            showEmptyMastersUI("APIキーが無効です (401)。右上「API設定」から正しいKeyを設定してください。");
+            return;
+          }
+          updateStatusUI("error", "取得エラー");
+          showEmptyMastersUI(`マスターデータの取得に失敗しました (${error.message})`);
           return;
         }
 
         if (!data || data.length === 0) {
-          showToast("マスターデータが存在しません。SQLでデータを読み込んでください", "info");
-          document.getElementById("masterSelect").innerHTML = `<option value="">データなし</option>`;
+          updateStatusUI("nodata", "データ未登録");
+          showEmptyMastersUI("Supabaseの `past_paper_masters` テーブルにデータが登録されていません。");
           return;
         }
 
         masterList = data;
         currentMaster = masterList[0];
 
+        updateStatusUI("connected");
         renderMasterSelect();
         renderSubjectInputs();
         calculateAll();
@@ -328,30 +441,66 @@
 
       } catch (err) {
         console.error("Fetch masters exception:", err);
-        showToast("マスターデータの通信エラーが発生しました", "error");
+        updateStatusUI("error", "通信エラー");
+        showEmptyMastersUI("Supabaseとの通信エラーが発生しました。");
       }
+    }
+
+    function showEmptyMastersUI(message) {
+      masterList = [];
+      currentMaster = null;
+
+      const select = document.getElementById("masterSelect");
+      select.innerHTML = `<option value="">-- データがありません --</option>`;
+
+      document.getElementById("bannerYearBadge").innerText = "--年度";
+      document.getElementById("bannerSchoolName").innerText = "データ未登録";
+      document.getElementById("bannerFullScore").innerText = "--点";
+      document.getElementById("bannerTotalAvg").innerText = "--点";
+      document.getElementById("bannerPassAvg").innerText = "--点";
+      document.getElementById("bannerPassMin").innerText = "--点";
+      document.getElementById("displayTotalFull").innerText = "/ --点満点";
+      document.getElementById("diffSubtitle").innerText = "ボーダー: --点";
+
+      const container = document.getElementById("subjectInputsContainer");
+      container.innerHTML = `
+        <div class="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs space-y-1">
+          <p class="font-bold"><i class="fa-solid fa-triangle-exclamation"></i> データが選択できません</p>
+          <p>${message}</p>
+        </div>
+      `;
+
+      calculateAll();
     }
 
     // ドロップダウン更新
     function renderMasterSelect() {
       const select = document.getElementById("masterSelect");
       select.innerHTML = "";
+      if (!masterList || masterList.length === 0) {
+        select.innerHTML = `<option value="">-- データがありません --</option>`;
+        return;
+      }
       masterList.forEach(m => {
         const opt = document.createElement("option");
         opt.value = m.id;
         opt.innerText = `${m.schoolName} (${m.year}年度)`;
         select.appendChild(opt);
       });
-      select.value = currentMaster.id;
+      select.value = currentMaster ? currentMaster.id : "";
       updateBanner();
     }
 
     function onMasterChange() {
       const selectVal = document.getElementById("masterSelect").value;
-      currentMaster = masterList.find(m => m.id === selectVal) || masterList[0];
-      updateBanner();
-      renderSubjectInputs();
-      calculateAll();
+      currentMaster = masterList.find(m => m.id === selectVal) || null;
+      if (currentMaster) {
+        updateBanner();
+        renderSubjectInputs();
+        calculateAll();
+      } else {
+        showEmptyMastersUI("選択された学校データが存在しません。");
+      }
     }
 
     // バナーの表示更新
@@ -402,7 +551,7 @@
     }
 
     function resetScores() {
-      if (!currentMaster) return;
+      if (!currentMaster || !currentMaster.subjects) return;
       Object.keys(currentMaster.subjects).forEach(key => {
         const input = document.getElementById(`input_${key}`);
         if (input) {
@@ -415,7 +564,7 @@
 
     // 受験者平均基準の偏差値算出ロジック
     function calcSubjectDev(score, subData) {
-      if (score === 0 || isNaN(score)) return 0;
+      if (score === 0 || isNaN(score) || !subData) return 0;
       const avg = subData.avg;
       const sd = subData.max * 0.18; // 推定標準偏差
       
@@ -488,7 +637,16 @@
 
     // 全体計算およびUIレンダリング
     function calculateAll() {
-      if (!currentMaster || !currentMaster.subjects) return;
+      if (!currentMaster || !currentMaster.subjects) {
+        document.getElementById("probabilityText").innerText = "0%";
+        document.getElementById("probBadge").innerText = "-- %";
+        document.getElementById("displayTotalScore").innerText = "0";
+        document.getElementById("displayTotalDev").innerText = "--";
+        document.getElementById("displayDiffScore").innerText = "--";
+        renderSubjectTable({}, {}, []);
+        renderSubjectBars({});
+        return;
+      }
 
       const keys = Object.keys(currentMaster.subjects);
       const scores = {};
@@ -605,7 +763,7 @@
 
       Object.keys(currentMaster.subjects).forEach(key => {
         const sub = currentMaster.subjects[key];
-        const userScore = scores[key];
+        const userScore = scores[key] || 0;
 
         const userPercent = Math.min(100, (userScore / sub.max) * 100);
         const avgPercent = (sub.avg / sub.max) * 100;
@@ -634,8 +792,18 @@
 
     // 演習結果を Supabase へ直接保存
     async function saveResultToSupabase() {
+      if (!currentMaster) {
+        showToast("学校データが選択されていません。", "error");
+        return;
+      }
+
       if (hasValidationError) {
         showToast("満点を超えている科目があります。修正してください。", "error");
+        return;
+      }
+
+      if (!supabaseClient) {
+        showToast("Supabaseに接続されていません。設定をご確認ください。", "error");
         return;
       }
 
@@ -661,7 +829,11 @@
         const { error } = await supabaseClient.from("past_paper_results").insert([record]);
         if (error) {
           console.error("Supabase insert error:", error);
-          showToast("Supabaseへの保存に失敗しました", "error");
+          if (error.status === 401) {
+            showToast("APIキーが無効のため保存できません。API設定を確認してください。", "error");
+          } else {
+            showToast("Supabaseへの保存に失敗しました", "error");
+          }
           return;
         }
 
@@ -678,6 +850,11 @@
     async function loadHistoryFromSupabase() {
       const tbody = document.getElementById("historyTableBody");
 
+      if (!supabaseClient) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">Supabase未接続</td></tr>`;
+        return;
+      }
+
       try {
         const { data, error } = await supabaseClient
           .from("past_paper_results")
@@ -687,7 +864,11 @@
 
         if (error) {
           console.error("Load history error:", error);
-          tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-bold">履歴の取得に失敗しました</td></tr>`;
+          if (error.status === 401) {
+            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-bold">APIキーが無効です (401 Error)</td></tr>`;
+          } else {
+            tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-bold">履歴の取得に失敗しました</td></tr>`;
+          }
           return;
         }
 
