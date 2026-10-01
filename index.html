@@ -32,38 +32,34 @@
         </div>
         <div>
           <h1 class="font-bold text-base sm:text-lg leading-tight">過去問 合格判定＆偏差値分析</h1>
-          <p class="text-xs text-slate-400">受験者平均基準 偏差値算定マイページ</p>
+          <p class="text-xs text-slate-400">Supabase リアルタイム連動マイページ</p>
         </div>
       </div>
-      <div class="flex items-center gap-2">
-        <button onclick="openConfigModal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
-          <i class="fa-solid fa-database text-amber-400"></i>
-          <span class="hidden sm:inline">Supabase設定</span>
-        </button>
+      <div class="flex items-center gap-2 text-xs text-slate-400 font-mono">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Supabase Connected
       </div>
     </div>
   </header>
 
   <main class="max-w-6xl mx-auto px-4 pt-6 space-y-6">
 
-    <!-- Top Control Bar: Select School & Year / Add New Master -->
+    <!-- Top Control Bar: Select School & Year from Supabase -->
     <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
         <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xl shrink-0">
           <i class="fa-solid fa-school"></i>
         </div>
-        <div class="w-full sm:w-auto flex-1">
-          <label class="text-[11px] font-bold text-slate-400 block mb-1">対象校・年度の選択</label>
-          <select id="masterSelect" onchange="onMasterChange()" class="w-full sm:w-72 font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-            <!-- Dynamic Options -->
+        <div class="w-full sm:w-80">
+          <label class="text-[11px] font-bold text-slate-400 block mb-1">対象校・年度の選択（Supabase取得）</label>
+          <select id="masterSelect" onchange="onMasterChange()" class="w-full font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <option value="">データ読み込み中...</option>
           </select>
         </div>
-      </div>
-
-      <div class="flex items-center gap-2 self-end md:self-auto w-full md:w-auto">
-        <button onclick="openAddMasterModal()" class="w-full md:w-auto text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
-          <i class="fa-solid fa-plus"></i> 新しい学校・年度を追加
-        </button>
+        <div class="text-xs text-slate-400 self-end sm:self-center">
+          <button onclick="fetchMastersFromSupabase()" class="text-blue-600 hover:underline font-bold flex items-center gap-1">
+            <i class="fa-solid fa-rotate"></i> マスター再読み込み
+          </button>
+        </div>
       </div>
     </div>
 
@@ -71,8 +67,8 @@
     <div id="benchmarkBanner" class="bg-slate-800 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <div class="flex items-center gap-2 mb-1">
-          <span id="bannerYearBadge" class="bg-amber-500 text-slate-900 text-xs font-black px-2 py-0.5 rounded">2025年度</span>
-          <span id="bannerSchoolName" class="text-sm font-bold text-slate-300">開成中学校</span>
+          <span id="bannerYearBadge" class="bg-amber-500 text-slate-900 text-xs font-black px-2 py-0.5 rounded">--年度</span>
+          <span id="bannerSchoolName" class="text-sm font-bold text-slate-300">学校名</span>
         </div>
         <h2 class="font-black text-xl text-white">過去問基準データ</h2>
       </div>
@@ -81,19 +77,19 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-900/60 p-3 rounded-xl border border-slate-700 text-center">
         <div>
           <span class="text-slate-400 block font-medium">4科満点</span>
-          <span class="font-black text-white text-sm" id="bannerFullScore">310点</span>
+          <span class="font-black text-white text-sm" id="bannerFullScore">--点</span>
         </div>
         <div>
           <span class="text-slate-400 block font-medium">受験者平均</span>
-          <span class="font-black text-slate-200 text-sm" id="bannerTotalAvg">192.2点</span>
+          <span class="font-black text-slate-200 text-sm" id="bannerTotalAvg">--点</span>
         </div>
         <div>
           <span class="text-slate-400 block font-medium">合格者平均</span>
-          <span class="font-black text-slate-200 text-sm" id="bannerPassAvg">219.5点</span>
+          <span class="font-black text-slate-200 text-sm" id="bannerPassAvg">--点</span>
         </div>
         <div>
           <span class="text-slate-400 block font-medium">合格最低点</span>
-          <span class="font-black text-amber-400 text-sm" id="bannerPassMin">202.0点</span>
+          <span class="font-black text-amber-400 text-sm" id="bannerPassMin">--点</span>
         </div>
       </div>
     </div>
@@ -130,7 +126,7 @@
 
         <div class="pt-4 space-y-2">
           <button id="saveBtn" onclick="saveResultToSupabase()" class="w-full text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1.5 py-2.5 rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-            <i class="fa-solid fa-cloud-arrow-up"></i> この演習結果を保存する
+            <i class="fa-solid fa-cloud-arrow-up"></i> この演習結果をSupabaseに保存する
           </button>
           <button onclick="resetScores()" class="w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2 border border-dashed border-slate-300 rounded-xl hover:bg-slate-50">
             <i class="fa-solid fa-rotate-left"></i> 入力クリア
@@ -171,7 +167,7 @@
             <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
               <span class="text-[11px] text-slate-400 font-bold block">4科合計点</span>
               <span class="text-2xl font-black text-slate-800" id="displayTotalScore">0</span>
-              <span class="text-[10px] text-slate-400 block" id="displayTotalFull">/ 310点満点</span>
+              <span class="text-[10px] text-slate-400 block" id="displayTotalFull">/ --点満点</span>
             </div>
 
             <div class="bg-blue-50/70 p-3 rounded-xl border border-blue-100/80">
@@ -223,14 +219,16 @@
           </div>
         </div>
 
-        <!-- Saved History Section -->
+        <!-- Saved History Section from Supabase -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
           <div class="flex justify-between items-center border-b pb-3">
             <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-clock-rotate-left text-amber-500"></i>
-              演習保存履歴
+              Supabase 演習保存履歴
             </h3>
-            <button onclick="loadHistory()" class="text-xs text-blue-600 hover:text-blue-800 font-bold">更新</button>
+            <button onclick="loadHistoryFromSupabase()" class="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1">
+              <i class="fa-solid fa-rotate"></i> 履歴更新
+            </button>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-xs text-left border-collapse">
@@ -244,7 +242,7 @@
                 </tr>
               </thead>
               <tbody id="historyTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
-                <tr><td colspan="5" class="p-4 text-center text-slate-400">履歴はありません</td></tr>
+                <tr><td colspan="5" class="p-4 text-center text-slate-400">履歴を取得中...</td></tr>
               </tbody>
             </table>
           </div>
@@ -254,154 +252,17 @@
     </div>
   </main>
 
-  <!-- Supabase Config Modal -->
-  <div id="configModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-    <div class="bg-white max-w-lg w-full rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="font-bold text-base text-slate-800"><i class="fa-solid fa-database text-amber-500 mr-2"></i>Supabase 連携設定</h3>
-        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-      </div>
-      <p class="text-xs text-slate-500 leading-relaxed">
-        埋め込み済みの接続情報で連携されています。
-      </p>
-      <div class="space-y-3 text-xs">
-        <div>
-          <label class="font-bold text-slate-700 block mb-1">Supabase Project URL</label>
-          <input type="text" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-600">
-        </div>
-        <div>
-          <label class="font-bold text-slate-700 block mb-1">Supabase Publishable Key</label>
-          <input type="password" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1NiI..." class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-600">
-        </div>
-      </div>
-
-      <!-- SQL Display Toggle -->
-      <div class="border-t pt-3 space-y-2">
-        <div class="flex justify-between items-center">
-          <span class="text-xs font-bold text-slate-700"><i class="fa-solid fa-code text-blue-500 mr-1"></i>テーブル作成用 SQL</span>
-          <button onclick="copySQL()" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1">
-            <i class="fa-regular fa-copy"></i> SQLをコピー
-          </button>
-        </div>
-        <textarea id="sqlSnippet" readonly class="w-full h-32 text-[10px] font-mono bg-slate-900 text-slate-200 p-2.5 rounded-xl border border-slate-700 resize-none outline-none leading-relaxed">CREATE TABLE IF NOT EXISTS public.past_paper_masters (
-  id TEXT PRIMARY KEY,
-  "schoolName" TEXT NOT NULL,
-  year INT NOT NULL,
-  "fullScore" NUMERIC NOT NULL,
-  "passMin" NUMERIC NOT NULL,
-  "passAvg" NUMERIC NOT NULL,
-  "totalAvg" NUMERIC NOT NULL,
-  subjects JSONB NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.past_paper_results (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  school_name TEXT NOT NULL,
-  year INT NOT NULL,
-  total_score NUMERIC NOT NULL,
-  estimated_dev TEXT,
-  probability TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.past_paper_masters ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.past_paper_results ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow public read/write on past_paper_masters" ON public.past_paper_masters FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read/write on past_paper_results" ON public.past_paper_results FOR ALL USING (true) WITH CHECK (true);
-
-INSERT INTO public.past_paper_masters (id, "schoolName", year, "fullScore", "passMin", "passAvg", "totalAvg", subjects)
-VALUES (
-  'kaisei_2025', '開成中学校', 2025, 310, 202.0, 219.5, 192.2,
-  '{"japanese": {"name": "国語", "max": 85, "avg": 40.4, "passAvg": 50.1}, "math": {"name": "算数", "max": 85, "avg": 46.9, "passAvg": 55.2}, "society": {"name": "社会", "max": 70, "avg": 52.9, "passAvg": 57.0}, "science": {"name": "理科", "max": 70, "avg": 52.0, "passAvg": 57.2}}'::jsonb
-) ON CONFLICT (id) DO NOTHING;</textarea>
-      </div>
-
-      <div class="flex gap-2 pt-2">
-        <button onclick="saveSupabaseConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">設定を保存して接続テスト</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Add Master Data Modal -->
-  <div id="addMasterModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-    <div class="bg-white max-w-lg w-full rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center border-b pb-3">
-        <h3 class="font-bold text-base text-slate-800"><i class="fa-solid fa-plus-circle text-blue-600 mr-2"></i>学校・年度マスターデータの新規登録</h3>
-        <button onclick="closeAddMasterModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-      </div>
-
-      <form id="addMasterForm" onsubmit="submitNewMaster(event)" class="space-y-4 text-xs">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="font-bold text-slate-700 block mb-1">学校名</label>
-            <input type="text" id="newSchoolName" required placeholder="例: 麻布中学校" class="w-full p-2.5 border rounded-lg font-bold">
-          </div>
-          <div>
-            <label class="font-bold text-slate-700 block mb-1">年度</label>
-            <input type="number" id="newYear" required placeholder="例: 2025" class="w-full p-2.5 border rounded-lg font-bold">
-          </div>
-        </div>
-
-        <div class="bg-slate-50 p-3 rounded-xl border space-y-2">
-          <span class="font-bold text-slate-700 block border-b pb-1">全体判定基準データ</span>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-slate-500 block">4科合計満点</label>
-              <input type="number" id="newFullScore" required placeholder="310" class="w-full p-2 border rounded">
-            </div>
-            <div>
-              <label class="text-slate-500 block">合格最低点</label>
-              <input type="number" step="0.1" id="newPassMin" required placeholder="202" class="w-full p-2 border rounded font-bold text-rose-600">
-            </div>
-            <div>
-              <label class="text-slate-500 block">受験者平均点</label>
-              <input type="number" step="0.1" id="newTotalAvg" required placeholder="192.2" class="w-full p-2 border rounded">
-            </div>
-            <div>
-              <label class="text-slate-500 block">合格者平均点</label>
-              <input type="number" step="0.1" id="newPassAvg" required placeholder="219.5" class="w-full p-2 border rounded">
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-2">
-          <span class="font-bold text-slate-700 block border-b pb-1">各科目の配点・平均点</span>
-          
-          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-            <span class="font-bold text-slate-700">国語</span>
-            <input type="number" id="newJapMax" required placeholder="満点(85)" class="p-1.5 border rounded">
-            <input type="number" step="0.1" id="newJapAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
-          </div>
-          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-            <span class="font-bold text-slate-700">算数</span>
-            <input type="number" id="newMathMax" required placeholder="満点(85)" class="p-1.5 border rounded">
-            <input type="number" step="0.1" id="newMathAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
-          </div>
-          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-            <span class="font-bold text-slate-700">社会</span>
-            <input type="number" id="newSocMax" required placeholder="満点(70)" class="p-1.5 border rounded">
-            <input type="number" step="0.1" id="newSocAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
-          </div>
-          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-            <span class="font-bold text-slate-700">理科</span>
-            <input type="number" id="newSciMax" required placeholder="満点(70)" class="p-1.5 border rounded">
-            <input type="number" step="0.1" id="newSciAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
-          </div>
-        </div>
-
-        <div class="pt-2">
-          <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl">マスターデータを登録</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <script>
-    // デフォルトのSupabase接続情報
-    const DEFAULT_SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
-    const DEFAULT_SUPABASE_KEY = "Sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
+    // 埋め込み済みの Supabase 接続情報
+    const SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
+    const SUPABASE_KEY = "Sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
+
+    // Supabase クライアントの初期化
+    const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+    let masterList = [];
+    let currentMaster = null;
+    let hasValidationError = false;
 
     // トースト通知関数
     function showToast(message, type = "success") {
@@ -427,90 +288,48 @@ VALUES (
       }, 3000);
     }
 
-    // 初期定義：学校・年度マスターのローカルデータ（開成2025のみ）
-    const initialMasters = [
-      {
-        id: "kaisei_2025",
-        schoolName: "開成中学校",
-        year: 2025,
-        fullScore: 310,
-        passMin: 202.0,
-        passAvg: 219.5,
-        totalAvg: 192.2,
-        subjects: {
-          japanese: { name: "国語", max: 85, avg: 40.4, passAvg: 50.1 },
-          math:     { name: "算数", max: 85, avg: 46.9, passAvg: 55.2 },
-          society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
-          science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
-        }
-      }
-    ];
-
-    let masterList = [...initialMasters];
-    let currentMaster = masterList[0];
-    let supabaseClient = null;
-    let hasValidationError = false;
-
-    // Supabase URL整形ヘルパー
-    function sanitizeSupabaseUrl(rawUrl) {
-      if (!rawUrl) return "";
-      let clean = rawUrl.trim();
-      clean = clean.replace(/\/rest\/v1\/?$/, "");
-      clean = clean.replace(/\/$/, "");
-      return clean;
-    }
-
-    // 初期化ハンドラ
+    // 画面初期化ハンドラ
     window.onload = async () => {
-      initSupabase();
-      await loadMasters();
-      renderMasterSelect();
-      renderSubjectInputs();
-      calculateAll();
-      loadHistory();
+      if (!supabaseClient) {
+        showToast("Supabaseクライアントの初期化に失敗しました", "error");
+        return;
+      }
+      await fetchMastersFromSupabase();
+      await loadHistoryFromSupabase();
     };
 
-    // Supabase クライアント初期化
-    function initSupabase() {
-      let rawUrl = localStorage.getItem("sb_url") || DEFAULT_SUPABASE_URL;
-      const key = (localStorage.getItem("sb_key") || DEFAULT_SUPABASE_KEY).trim();
-      const url = sanitizeSupabaseUrl(rawUrl);
+    // Supabaseからマスターデータを直接取得
+    async function fetchMastersFromSupabase() {
+      try {
+        const { data, error } = await supabaseClient
+          .from("past_paper_masters")
+          .select("*")
+          .order("year", { ascending: false });
 
-      document.getElementById("supabaseUrlInput").value = url;
-      document.getElementById("supabaseKeyInput").value = key;
-
-      if (url && key && window.supabase) {
-        try {
-          supabaseClient = window.supabase.createClient(url, key);
-        } catch(e) {
-          console.warn("Supabase initialization error:", e);
+        if (error) {
+          console.error("Supabase fetch masters error:", error);
+          showToast("マスターデータの取得に失敗しました", "error");
+          return;
         }
-      }
-    }
 
-    // マスターデータ読み込み
-    async function loadMasters() {
-      const localCustom = localStorage.getItem("custom_masters");
-      let customLocalList = [];
-      if (localCustom) {
-        try {
-          customLocalList = JSON.parse(localCustom);
-        } catch(e) { console.error(e); }
-      }
+        if (!data || data.length === 0) {
+          showToast("マスターデータが存在しません。SQLでデータを読み込んでください", "info");
+          document.getElementById("masterSelect").innerHTML = `<option value="">データなし</option>`;
+          return;
+        }
 
-      if (supabaseClient) {
-        try {
-          const { data, error } = await supabaseClient.from("past_paper_masters").select("*");
-          if (!error && data && data.length > 0) {
-            masterList = [...data];
-            currentMaster = masterList[0];
-            return;
-          }
-        } catch(e) { console.warn("Supabase fetch failed, fallback to local:", e); }
-      }
+        masterList = data;
+        currentMaster = masterList[0];
 
-      masterList = [...initialMasters, ...customLocalList];
-      currentMaster = masterList[0];
+        renderMasterSelect();
+        renderSubjectInputs();
+        calculateAll();
+        showToast("Supabaseから最新マスターデータを取得しました");
+
+      } catch (err) {
+        console.error("Fetch masters exception:", err);
+        showToast("マスターデータの通信エラーが発生しました", "error");
+      }
     }
 
     // ドロップダウン更新
@@ -537,6 +356,7 @@ VALUES (
 
     // バナーの表示更新
     function updateBanner() {
+      if (!currentMaster) return;
       document.getElementById("bannerYearBadge").innerText = `${currentMaster.year}年度`;
       document.getElementById("bannerSchoolName").innerText = currentMaster.schoolName;
       document.getElementById("bannerFullScore").innerText = `${currentMaster.fullScore}点`;
@@ -551,6 +371,8 @@ VALUES (
     function renderSubjectInputs() {
       const container = document.getElementById("subjectInputsContainer");
       container.innerHTML = "";
+
+      if (!currentMaster || !currentMaster.subjects) return;
 
       const colorMap = { japanese: "rose-500", math: "blue-500", society: "amber-500", science: "emerald-500" };
 
@@ -580,6 +402,7 @@ VALUES (
     }
 
     function resetScores() {
+      if (!currentMaster) return;
       Object.keys(currentMaster.subjects).forEach(key => {
         const input = document.getElementById(`input_${key}`);
         if (input) {
@@ -590,7 +413,7 @@ VALUES (
       calculateAll();
     }
 
-    // 【受験者平均基準】の偏差値算出ロジック
+    // 受験者平均基準の偏差値算出ロジック
     function calcSubjectDev(score, subData) {
       if (score === 0 || isNaN(score)) return 0;
       const avg = subData.avg;
@@ -602,7 +425,7 @@ VALUES (
 
     // 4科合計の受験者基準偏差値
     function calcTotalDev(totalScore) {
-      if (totalScore === 0 || isNaN(totalScore)) return 0;
+      if (totalScore === 0 || isNaN(totalScore) || !currentMaster) return 0;
       const avg = currentMaster.totalAvg;
       const sd = currentMaster.fullScore * 0.15; // 4科合計の推定標準偏差
       
@@ -612,7 +435,7 @@ VALUES (
 
     // 合格可能性(%) 計算ロジック（20%〜80% の10%刻み）
     function calcProbability(totalScore, hasInput) {
-      if (!hasInput || totalScore === 0) {
+      if (!hasInput || totalScore === 0 || !currentMaster) {
         return { prob: 0, title: "点数を入力してください", badgeClass: "bg-slate-200 text-slate-600" };
       }
 
@@ -625,19 +448,15 @@ VALUES (
       if (totalScore >= passAvg) {
         rawProb = 80;
       } else if (totalScore >= min) {
-        // 最低点〜合格者平均: 50% 〜 80% で補間
         const ratio = (totalScore - min) / (passAvg - min);
         rawProb = 50 + ratio * 30;
       } else if (totalScore >= avg) {
-        // 受験者平均〜最低点: 30% 〜 50% で補間
         const ratio = (totalScore - avg) / (min - avg);
         rawProb = 30 + ratio * 20;
       } else {
-        // 受験者平均未満: 20%
         rawProb = 20;
       }
 
-      // 10%刻みに丸め込み (20%〜80%)
       let prob = Math.round(rawProb / 10) * 10;
       prob = Math.max(20, Math.min(80, prob));
 
@@ -669,6 +488,8 @@ VALUES (
 
     // 全体計算およびUIレンダリング
     function calculateAll() {
+      if (!currentMaster || !currentMaster.subjects) return;
+
       const keys = Object.keys(currentMaster.subjects);
       const scores = {};
       const inputs = [];
@@ -755,6 +576,8 @@ VALUES (
       const tbody = document.getElementById("subjectTableBody");
       tbody.innerHTML = "";
 
+      if (!currentMaster || !currentMaster.subjects) return;
+
       Object.keys(currentMaster.subjects).forEach((key, index) => {
         const sub = currentMaster.subjects[key];
         const isOver = scores[key] > sub.max;
@@ -777,6 +600,8 @@ VALUES (
     function renderSubjectBars(scores) {
       const container = document.getElementById("subjectBarContainer");
       container.innerHTML = "";
+
+      if (!currentMaster || !currentMaster.subjects) return;
 
       Object.keys(currentMaster.subjects).forEach(key => {
         const sub = currentMaster.subjects[key];
@@ -807,6 +632,7 @@ VALUES (
       });
     }
 
+    // 演習結果を Supabase へ直接保存
     async function saveResultToSupabase() {
       if (hasValidationError) {
         showToast("満点を超えている科目があります。修正してください。", "error");
@@ -831,138 +657,65 @@ VALUES (
         created_at: new Date().toISOString()
       };
 
-      if (supabaseClient) {
-        try {
-          const { error } = await supabaseClient.from("past_paper_results").insert([record]);
-          if (error) console.warn("Supabase insert error:", error);
-        } catch(e) { console.warn("Supabase insert exception:", e); }
-      }
-
-      // ローカルストレージ保存
-      const history = JSON.parse(localStorage.getItem("paper_history") || "[]");
-      history.unshift({ ...record, created_at: new Date().toLocaleString() });
-      localStorage.setItem("paper_history", JSON.stringify(history));
-
-      showToast("演習結果を保存しました。");
-      loadHistory();
-    }
-
-    async function loadHistory() {
-      const tbody = document.getElementById("historyTableBody");
-      let history = [];
-
-      if (supabaseClient) {
-        try {
-          const { data, error } = await supabaseClient.from("past_paper_results").select("*").order("created_at", { ascending: false }).limit(20);
-          if (!error && data && data.length > 0) {
-            history = data.map(d => ({
-              created_at: d.created_at ? new Date(d.created_at).toLocaleString() : '--',
-              school_name: d.school_name,
-              year: d.year,
-              total_score: d.total_score,
-              estimated_dev: d.estimated_dev,
-              probability: d.probability
-            }));
-          }
-        } catch(e) { console.warn("Load history failed:", e); }
-      }
-
-      if (history.length === 0) {
-        history = JSON.parse(localStorage.getItem("paper_history") || "[]");
-      }
-
-      tbody.innerHTML = "";
-
-      if (history.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">履歴はありません</td></tr>`;
-        return;
-      }
-
-      history.slice(0, 10).forEach(h => {
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50";
-        tr.innerHTML = `
-          <td class="p-2 text-slate-400">${h.created_at || '--'}</td>
-          <td class="p-2 font-bold text-slate-800">${h.school_name} (${h.year})</td>
-          <td class="p-2 text-right font-black">${h.total_score}点</td>
-          <td class="p-2 text-right font-bold text-blue-600">${h.estimated_dev}</td>
-          <td class="p-2 text-right font-bold text-emerald-600">${h.probability}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    // モーダル操作
-    function openConfigModal() { document.getElementById("configModal").classList.remove("hidden"); }
-    function closeConfigModal() { document.getElementById("configModal").classList.add("hidden"); }
-    
-    function saveSupabaseConfig() {
-      const rawUrl = document.getElementById("supabaseUrlInput").value;
-      const key = document.getElementById("supabaseKeyInput").value.trim();
-      const url = sanitizeSupabaseUrl(rawUrl);
-
-      localStorage.setItem("sb_url", url);
-      localStorage.setItem("sb_key", key);
-      initSupabase();
-      closeConfigModal();
-      showToast("Supabase設定を更新しました。");
-      loadMasters().then(() => {
-        renderMasterSelect();
-        renderSubjectInputs();
-        calculateAll();
-        loadHistory();
-      });
-    }
-
-    function copySQL() {
-      const sqlText = document.getElementById("sqlSnippet").value;
-      const textArea = document.createElement("textarea");
-      textArea.value = sqlText;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      showToast("SQL文をクリップボードにコピーしました！");
-    }
-
-    function openAddMasterModal() { document.getElementById("addMasterModal").classList.remove("hidden"); }
-    function closeAddMasterModal() { document.getElementById("addMasterModal").classList.add("hidden"); }
-
-    async function submitNewMaster(e) {
-      e.preventDefault();
-      const newM = {
-        id: `custom_${Date.now()}`,
-        schoolName: document.getElementById("newSchoolName").value,
-        year: parseInt(document.getElementById("newYear").value),
-        fullScore: parseFloat(document.getElementById("newFullScore").value),
-        passMin: parseFloat(document.getElementById("newPassMin").value),
-        totalAvg: parseFloat(document.getElementById("newTotalAvg").value),
-        passAvg: parseFloat(document.getElementById("newPassAvg").value),
-        subjects: {
-          japanese: { name: "国語", max: parseFloat(document.getElementById("newJapMax").value), avg: parseFloat(document.getElementById("newJapAvg").value) },
-          math:     { name: "算数", max: parseFloat(document.getElementById("newMathMax").value), avg: parseFloat(document.getElementById("newMathAvg").value) },
-          society:  { name: "社会", max: parseFloat(document.getElementById("newSocMax").value), avg: parseFloat(document.getElementById("newSocAvg").value) },
-          science:  { name: "理科", max: parseFloat(document.getElementById("newSciMax").value), avg: parseFloat(document.getElementById("newSciAvg").value) }
+      try {
+        const { error } = await supabaseClient.from("past_paper_results").insert([record]);
+        if (error) {
+          console.error("Supabase insert error:", error);
+          showToast("Supabaseへの保存に失敗しました", "error");
+          return;
         }
-      };
 
-      masterList.push(newM);
-      const customMasters = JSON.parse(localStorage.getItem("custom_masters") || "[]");
-      customMasters.push(newM);
-      localStorage.setItem("custom_masters", JSON.stringify(customMasters));
+        showToast("演習結果をSupabaseに保存しました！");
+        await loadHistoryFromSupabase();
 
-      if (supabaseClient) {
-        try {
-          await supabaseClient.from("past_paper_masters").insert([newM]);
-        } catch(err) { console.warn(err); }
+      } catch(e) {
+        console.error("Save exception:", e);
+        showToast("保存処理中に通信エラーが発生しました", "error");
       }
+    }
 
-      currentMaster = newM;
-      renderMasterSelect();
-      renderSubjectInputs();
-      calculateAll();
-      closeAddMasterModal();
-      showToast("新しいマスターデータを追加しました。");
+    // Supabase から演習履歴を直接読み込み
+    async function loadHistoryFromSupabase() {
+      const tbody = document.getElementById("historyTableBody");
+
+      try {
+        const { data, error } = await supabaseClient
+          .from("past_paper_results")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(20);
+
+        if (error) {
+          console.error("Load history error:", error);
+          tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-bold">履歴の取得に失敗しました</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = "";
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">保存された履歴はありません</td></tr>`;
+          return;
+        }
+
+        data.forEach(h => {
+          const dateStr = h.created_at ? new Date(h.created_at).toLocaleString('ja-JP') : '--';
+          const tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-50 transition";
+          tr.innerHTML = `
+            <td class="p-2 text-slate-400 font-mono">${dateStr}</td>
+            <td class="p-2 font-bold text-slate-800">${h.school_name} (${h.year})</td>
+            <td class="p-2 text-right font-black">${h.total_score}点</td>
+            <td class="p-2 text-right font-bold text-blue-600">${h.estimated_dev}</td>
+            <td class="p-2 text-right font-bold text-emerald-600">${h.probability}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+      } catch(e) {
+        console.error("Load history exception:", e);
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500 font-bold">通信エラーが発生しました</td></tr>`;
+      }
     }
   </script>
 </body>
