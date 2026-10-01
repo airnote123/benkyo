@@ -114,6 +114,12 @@
             </span>
           </div>
 
+          <!-- Error Alert Message -->
+          <div id="validationErrorBox" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-600 flex items-center gap-2">
+            <i class="fa-solid fa-triangle-exclamation text-rose-500 text-sm"></i>
+            <span id="validationErrorText">満点を超える得点が入力されています。</span>
+          </div>
+
           <form id="scoreForm" oninput="calculateAll()" class="space-y-4">
             <!-- Dynamic Subject Inputs Container -->
             <div id="subjectInputsContainer" class="space-y-3">
@@ -123,7 +129,7 @@
         </div>
 
         <div class="pt-4 space-y-2">
-          <button onclick="saveResultToSupabase()" class="w-full text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1.5 py-2.5 rounded-xl shadow-sm">
+          <button id="saveBtn" onclick="saveResultToSupabase()" class="w-full text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1.5 py-2.5 rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
             <i class="fa-solid fa-cloud-arrow-up"></i> この演習結果を保存する
           </button>
           <button onclick="resetScores()" class="w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2 border border-dashed border-slate-300 rounded-xl hover:bg-slate-50">
@@ -143,17 +149,17 @@
               <span class="text-xs font-bold text-slate-400 block mb-1">合格可能性（過去問データ基準）</span>
               <div class="flex items-baseline gap-2">
                 <h3 class="text-5xl font-black text-slate-800 tracking-tight" id="probabilityText">0%</h3>
-                <span class="text-xs text-slate-500 font-bold">（推定判定）</span>
+                <span class="text-xs text-slate-500 font-bold">（推定判定 20%〜80%）</span>
               </div>
             </div>
 
-            <!-- Rank Badge -->
+            <!-- Probability Badge -->
             <div class="flex items-center gap-3">
-              <div id="rankBadge" class="bg-slate-200 text-slate-600 text-3xl font-black px-5 py-2.5 rounded-2xl shadow-inner tracking-wider">
-                --
+              <div id="probBadge" class="bg-slate-200 text-slate-600 text-2xl font-black px-4 py-2.5 rounded-2xl shadow-inner tracking-wider">
+                -- %
               </div>
               <div>
-                <span class="text-xs font-bold text-slate-400 block">総合判定</span>
+                <span class="text-xs font-bold text-slate-400 block">判定状況</span>
                 <span id="rankTitle" class="text-sm font-bold text-slate-700">点数を入力してください</span>
               </div>
             </div>
@@ -256,7 +262,7 @@
         <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
       </div>
       <p class="text-xs text-slate-500 leading-relaxed">
-        埋め込み済みの接続情報で連携されています。テーブル未作成の場合は、下のSQLを実行してください。
+        埋め込み済みの接続情報で連携されています。
       </p>
       <div class="space-y-3 text-xs">
         <div>
@@ -264,7 +270,7 @@
           <input type="text" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-600">
         </div>
         <div>
-          <label class="font-bold text-slate-700 block mb-1">Supabase Publishable / Anon Key</label>
+          <label class="font-bold text-slate-700 block mb-1">Supabase Publishable Key</label>
           <input type="password" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1NiI..." class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-600">
         </div>
       </div>
@@ -421,7 +427,7 @@ VALUES (
       }, 3000);
     }
 
-    // 初期定義：学校・年度マスターのローカルデータ
+    // 初期定義：学校・年度マスターのローカルデータ（開成2025のみ）
     const initialMasters = [
       {
         id: "kaisei_2025",
@@ -437,29 +443,15 @@ VALUES (
           society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
           science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
         }
-      },
-      {
-        id: "kaisei_2026",
-        schoolName: "開成中学校",
-        year: 2026,
-        fullScore: 310,
-        passMin: 205.0,
-        passAvg: 222.7,
-        totalAvg: 193.4,
-        subjects: {
-          japanese: { name: "国語", max: 85, avg: 50.3, passAvg: 57.0 },
-          math:     { name: "算数", max: 85, avg: 41.6, passAvg: 54.8 },
-          society:  { name: "社会", max: 70, avg: 52.8, passAvg: 55.9 },
-          science:  { name: "理科", max: 70, avg: 48.7, passAvg: 55.0 }
-        }
       }
     ];
 
     let masterList = [...initialMasters];
     let currentMaster = masterList[0];
     let supabaseClient = null;
+    let hasValidationError = false;
 
-    // Supabase URL整形ヘルパー (/rest/v1/ などの不要なパスを除去)
+    // Supabase URL整形ヘルパー
     function sanitizeSupabaseUrl(rawUrl) {
       if (!rawUrl) return "";
       let clean = rawUrl.trim();
@@ -574,7 +566,7 @@ VALUES (
               <span class="w-2.5 h-2.5 rounded-full bg-${dotColor}"></span> ${sub.name}
             </label>
             <div class="flex items-center gap-1.5">
-              <input type="number" id="input_${key}" min="0" max="${sub.max}" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+              <input type="number" id="input_${key}" min="0" max="${sub.max}" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-colors">
               <span class="text-xs font-bold text-slate-500">/ ${sub.max}点</span>
             </div>
           </div>
@@ -590,14 +582,15 @@ VALUES (
     function resetScores() {
       Object.keys(currentMaster.subjects).forEach(key => {
         const input = document.getElementById(`input_${key}`);
-        if (input) input.value = "";
+        if (input) {
+          input.value = "";
+          input.classList.remove("border-rose-500", "bg-rose-50", "text-rose-600");
+        }
       });
       calculateAll();
     }
 
     // 【受験者平均基準】の偏差値算出ロジック
-    // 受験者平均点 = 偏差値 50.0
-    // 各教科の標準偏差(SD)の推定: 満点の約 18% 程度と仮定
     function calcSubjectDev(score, subData) {
       if (score === 0 || isNaN(score)) return 0;
       const avg = subData.avg;
@@ -617,55 +610,61 @@ VALUES (
       return Math.round(Math.min(85.0, Math.max(25.0, dev)) * 10) / 10;
     }
 
-    // 合格可能性(%) 計算ロジック
+    // 合格可能性(%) 計算ロジック（20%〜80% の10%刻み）
     function calcProbability(totalScore, hasInput) {
-      if (!hasInput || totalScore === 0) return { prob: 0, rank: "--", title: "点数を入力してください", badgeClass: "bg-slate-200 text-slate-600" };
+      if (!hasInput || totalScore === 0) {
+        return { prob: 0, title: "点数を入力してください", badgeClass: "bg-slate-200 text-slate-600" };
+      }
 
       const min = currentMaster.passMin;
       const passAvg = currentMaster.passAvg;
       const avg = currentMaster.totalAvg;
 
-      let prob = 0;
+      let rawProb = 20;
 
       if (totalScore >= passAvg) {
-        const extra = ((totalScore - passAvg) / (currentMaster.fullScore - passAvg)) * 15;
-        prob = Math.min(95, Math.round(80 + extra));
+        rawProb = 80;
       } else if (totalScore >= min) {
+        // 最低点〜合格者平均: 50% 〜 80% で補間
         const ratio = (totalScore - min) / (passAvg - min);
-        prob = Math.round(50 + ratio * 30);
+        rawProb = 50 + ratio * 30;
       } else if (totalScore >= avg) {
+        // 受験者平均〜最低点: 30% 〜 50% で補間
         const ratio = (totalScore - avg) / (min - avg);
-        prob = Math.round(30 + ratio * 20);
+        rawProb = 30 + ratio * 20;
       } else {
-        const ratio = Math.max(0, totalScore / avg);
-        prob = Math.max(10, Math.round(ratio * 30));
+        // 受験者平均未満: 20%
+        rawProb = 20;
       }
 
-      prob = Math.round(prob / 5) * 5;
+      // 10%刻みに丸め込み (20%〜80%)
+      let prob = Math.round(rawProb / 10) * 10;
+      prob = Math.max(20, Math.min(80, prob));
 
-      let rank = "E";
-      let title = "要再考・基礎強化 (最低点との差大)";
+      let title = "再考圏 (目標まで要対策)";
       let badgeClass = "bg-rose-500 text-white shadow-rose-200";
 
       if (prob >= 80) {
-        rank = "A";
-        title = "合格安全圏 (アドバンテージあり)";
+        title = "合格安全圏 (合格者平均クリア)";
         badgeClass = "bg-emerald-500 text-white shadow-emerald-200";
       } else if (prob >= 70) {
-        rank = "B";
-        title = "合格圏 (有望・好調)";
+        title = "合格圏 (高確率でボーダー超え)";
         badgeClass = "bg-teal-500 text-white shadow-teal-200";
+      } else if (prob >= 60) {
+        title = "合格可能圏 (ボーダーライン以上)";
+        badgeClass = "bg-blue-500 text-white shadow-blue-200";
       } else if (prob >= 50) {
-        rank = "C";
-        title = "ボーダーライン (最低点クリア)";
+        title = "ボーダー圏 (合格最低点ギリギリ)";
         badgeClass = "bg-amber-500 text-white shadow-amber-200";
-      } else if (prob >= 30) {
-        rank = "D";
+      } else if (prob >= 40) {
         title = "挑戦圏 (あと数点でボーダー)";
         badgeClass = "bg-orange-500 text-white shadow-orange-200";
+      } else if (prob >= 30) {
+        title = "努力圏 (基礎・過去問分析が必要)";
+        badgeClass = "bg-rose-400 text-white shadow-rose-200";
       }
 
-      return { prob, rank, title, badgeClass };
+      return { prob, title, badgeClass };
     }
 
     // 全体計算およびUIレンダリング
@@ -673,36 +672,71 @@ VALUES (
       const keys = Object.keys(currentMaster.subjects);
       const scores = {};
       const inputs = [];
+      let overMaxError = false;
+      let overMaxSubject = "";
 
       keys.forEach(key => {
-        const val = document.getElementById(`input_${key}`)?.value || "";
+        const sub = currentMaster.subjects[key];
+        const inputElem = document.getElementById(`input_${key}`);
+        const val = inputElem?.value || "";
         inputs.push(val);
-        scores[key] = parseFloat(val) || 0;
+        const score = parseFloat(val) || 0;
+        scores[key] = score;
+
+        // 満点チェック
+        if (val !== "" && score > sub.max) {
+          overMaxError = true;
+          overMaxSubject = sub.name;
+          if (inputElem) {
+            inputElem.classList.add("border-rose-500", "bg-rose-50", "text-rose-600");
+          }
+        } else if (inputElem) {
+          inputElem.classList.remove("border-rose-500", "bg-rose-50", "text-rose-600");
+        }
       });
+
+      // バリデーションエラー処理
+      hasValidationError = overMaxError;
+      const errorBox = document.getElementById("validationErrorBox");
+      const errorText = document.getElementById("validationErrorText");
+      const saveBtn = document.getElementById("saveBtn");
+
+      if (overMaxError) {
+        errorText.innerText = `【${overMaxSubject}】の入力点数が満点を超えています。`;
+        errorBox.classList.remove("hidden");
+        saveBtn.disabled = true;
+      } else {
+        errorBox.classList.add("hidden");
+        saveBtn.disabled = false;
+      }
 
       const hasInput = inputs.some(val => val !== "");
       const totalScore = keys.reduce((sum, key) => sum + scores[key], 0);
 
-      const totalDev = hasInput ? calcTotalDev(totalScore) : "--";
+      const totalDev = (hasInput && !overMaxError) ? calcTotalDev(totalScore) : "--";
       const subjectDevs = {};
       keys.forEach((key, idx) => {
-        subjectDevs[key] = inputs[idx] !== "" ? calcSubjectDev(scores[key], currentMaster.subjects[key]) : "--";
+        subjectDevs[key] = (inputs[idx] !== "" && scores[key] <= currentMaster.subjects[key].max) 
+          ? calcSubjectDev(scores[key], currentMaster.subjects[key]) 
+          : "--";
       });
 
-      const evalRes = calcProbability(totalScore, hasInput);
+      const evalRes = (overMaxError) 
+        ? { prob: 0, title: "得点にエラーがあります", badgeClass: "bg-rose-500 text-white" }
+        : calcProbability(totalScore, hasInput);
 
       // UI反映
-      document.getElementById("probabilityText").innerText = hasInput ? `${evalRes.prob}%` : "0%";
-      document.getElementById("rankBadge").innerText = evalRes.rank;
-      document.getElementById("rankBadge").className = `text-3xl font-black px-5 py-2.5 rounded-2xl shadow-md transition-all duration-300 ${evalRes.badgeClass}`;
+      document.getElementById("probabilityText").innerText = (hasInput && !overMaxError) ? `${evalRes.prob}%` : "0%";
+      document.getElementById("probBadge").innerText = (hasInput && !overMaxError) ? `${evalRes.prob}%` : "-- %";
+      document.getElementById("probBadge").className = `text-2xl font-black px-4 py-2.5 rounded-2xl shadow-md transition-all duration-300 ${evalRes.badgeClass}`;
       document.getElementById("rankTitle").innerText = evalRes.title;
 
-      document.getElementById("displayTotalScore").innerText = hasInput ? totalScore : 0;
-      document.getElementById("displayTotalDev").innerText = hasInput ? totalDev : "--";
+      document.getElementById("displayTotalScore").innerText = (hasInput && !overMaxError) ? totalScore : 0;
+      document.getElementById("displayTotalDev").innerText = (hasInput && !overMaxError) ? totalDev : "--";
 
       const diffMin = totalScore - currentMaster.passMin;
       const diffElem = document.getElementById("displayDiffScore");
-      if (!hasInput) {
+      if (!hasInput || overMaxError) {
         diffElem.innerText = "--";
         diffElem.className = "text-2xl font-black text-slate-800";
       } else if (diffMin >= 0) {
@@ -723,14 +757,15 @@ VALUES (
 
       Object.keys(currentMaster.subjects).forEach((key, index) => {
         const sub = currentMaster.subjects[key];
-        const userScore = inputs[index] !== "" ? scores[key] : "--";
+        const isOver = scores[key] > sub.max;
+        const userScore = inputs[index] !== "" ? (isOver ? "エラー" : scores[key]) : "--";
         const devVal = devs[key];
 
         const tr = document.createElement("tr");
         tr.className = "hover:bg-slate-50 transition";
         tr.innerHTML = `
           <td class="p-2.5 font-bold text-slate-800">${sub.name} <span class="text-[10px] text-slate-400 font-normal">(満点${sub.max})</span></td>
-          <td class="p-2.5 text-right font-black text-slate-900">${userScore}${inputs[index] !== "" ? '点' : ''}</td>
+          <td class="p-2.5 text-right font-black ${isOver ? 'text-rose-600' : 'text-slate-900'}">${userScore}${inputs[index] !== "" && !isOver ? '点' : ''}</td>
           <td class="p-2.5 text-right text-slate-500">${sub.avg}点</td>
           <td class="p-2.5 text-right text-slate-500">${sub.passAvg || '--'}点</td>
           <td class="p-2.5 text-right font-black text-blue-600 text-sm">${devVal !== "--" ? devVal : '--'}</td>
@@ -756,7 +791,7 @@ VALUES (
             <div class="flex justify-between font-bold text-slate-700">
               <span class="flex items-center gap-1.5">${sub.name} <span class="text-slate-400 font-normal">(満点${sub.max}点)</span></span>
               <span>
-                キミ: <strong class="text-blue-600 font-black text-sm">${userScore}</strong>点 
+                キミ: <strong class="text-blue-600 font-black text-sm">${userScore > sub.max ? '満点超過' : userScore}</strong>点 
                 <span class="text-slate-400 font-normal"> / 受験者平均${sub.avg}点</span>
               </span>
             </div>
@@ -764,7 +799,7 @@ VALUES (
             <div class="relative w-full h-3.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
               <div class="absolute top-0 bottom-0 bg-slate-300 opacity-60" style="width: ${avgPercent}%;" title="受験者平均: ${sub.avg}点"></div>
               ${passAvgPercent ? `<div class="absolute top-0 bottom-0 w-1 bg-amber-500 z-20" style="left: calc(${passAvgPercent}% - 2px);" title="合格者平均: ${sub.passAvg}点"></div>` : ''}
-              <div class="absolute top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-300 opacity-90 z-10" style="width: ${userPercent}%;"></div>
+              <div class="absolute top-0 bottom-0 ${userScore > sub.max ? 'bg-rose-500' : 'bg-blue-600'} rounded-full transition-all duration-300 opacity-90 z-10" style="width: ${userPercent}%;"></div>
             </div>
           </div>
         `;
@@ -773,6 +808,11 @@ VALUES (
     }
 
     async function saveResultToSupabase() {
+      if (hasValidationError) {
+        showToast("満点を超えている科目があります。修正してください。", "error");
+        return;
+      }
+
       const totalScore = parseFloat(document.getElementById("displayTotalScore").innerText) || 0;
       if (totalScore === 0) {
         showToast("得点を入力してください。", "info");
