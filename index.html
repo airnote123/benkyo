@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>開成過去問 合格可能性＆推定偏差値 マイページ</title>
+  <title>過去問 合格判定＆偏差値分析マイページ</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
     body {
@@ -13,65 +15,85 @@
     }
   </style>
 </head>
-<body class="bg-slate-100 min-h-screen text-slate-800 pb-12">
+<body class="bg-slate-100 min-h-screen text-slate-800 pb-16">
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2.5 pointer-events-none text-xs font-bold">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+    <span id="toastMessage">通知メッセージ</span>
+  </div>
 
   <!-- Header -->
-  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-40">
     <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
       <div class="flex items-center gap-3">
         <div class="bg-amber-500 text-slate-900 font-black px-2.5 py-1 rounded-lg text-xs tracking-wider">
           PAST PAPER ANALYZER
         </div>
         <div>
-          <h1 class="font-bold text-base sm:text-lg leading-tight">開成過去問 合格判定＆偏差値分析</h1>
-          <p class="text-xs text-slate-400">2025年度 (令和7年) 過去問演習マイページ</p>
+          <h1 class="font-bold text-base sm:text-lg leading-tight">過去問 合格判定＆偏差値分析</h1>
+          <p class="text-xs text-slate-400">受験者平均基準 偏差値算定マイページ</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 text-xs text-slate-300">
-        <i class="fa-solid fa-user-graduate text-lg text-amber-400"></i>
-        <span class="hidden sm:inline font-medium">生徒マイページ</span>
+      <div class="flex items-center gap-2">
+        <button onclick="openConfigModal()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-database text-amber-400"></i>
+          <span class="hidden sm:inline">Supabase設定</span>
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Container -->
   <main class="max-w-6xl mx-auto px-4 pt-6 space-y-6">
 
-    <!-- Benchmark Target Banner -->
+    <!-- Top Control Bar: Select School & Year / Add New Master -->
     <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-2xl shrink-0">
-          <i class="fa-solid fa-graduation-cap"></i>
+      <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-xl shrink-0">
+          <i class="fa-solid fa-school"></i>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">2025年度 (令和7)</span>
-            <span class="text-xs text-slate-400 font-bold">開成中学校 入試結果データ基準</span>
-          </div>
-          <h2 class="font-black text-xl text-slate-800">開成過去問 判定＆推定偏差値</h2>
+        <div class="w-full sm:w-auto flex-1">
+          <label class="text-[11px] font-bold text-slate-400 block mb-1">対象校・年度の選択</label>
+          <select id="masterSelect" onchange="onMasterChange()" class="w-full sm:w-72 font-bold text-slate-800 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <!-- Dynamic Options -->
+          </select>
         </div>
       </div>
 
+      <div class="flex items-center gap-2 self-end md:self-auto w-full md:w-auto">
+        <button onclick="openAddMasterModal()" class="w-full md:w-auto text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-plus"></i> 新しい学校・年度を追加
+        </button>
+      </div>
+    </div>
+
+    <!-- Benchmark Target Banner -->
+    <div id="benchmarkBanner" class="bg-slate-800 text-white p-4 sm:p-5 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span id="bannerYearBadge" class="bg-amber-500 text-slate-900 text-xs font-black px-2 py-0.5 rounded">2025年度</span>
+          <span id="bannerSchoolName" class="text-sm font-bold text-slate-300">開成中学校</span>
+        </div>
+        <h2 class="font-black text-xl text-white">過去問基準データ</h2>
+      </div>
+
       <!-- Quick Benchmark Stats -->
-      <div class="grid grid-cols-3 sm:flex items-center gap-3 sm:gap-6 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200/60 text-center">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-900/60 p-3 rounded-xl border border-slate-700 text-center">
         <div>
-          <span class="text-slate-400 block font-bold">4科満点</span>
-          <span class="font-black text-slate-700 text-sm">310点</span>
+          <span class="text-slate-400 block font-medium">4科満点</span>
+          <span class="font-black text-white text-sm" id="bannerFullScore">310点</span>
         </div>
-        <div class="hidden sm:block h-6 w-px bg-slate-200"></div>
         <div>
-          <span class="text-slate-400 block font-bold">受験者平均</span>
-          <span class="font-black text-slate-700 text-sm">192.2点</span>
+          <span class="text-slate-400 block font-medium">受験者平均</span>
+          <span class="font-black text-slate-200 text-sm" id="bannerTotalAvg">192.2点</span>
         </div>
-        <div class="hidden sm:block h-6 w-px bg-slate-200"></div>
         <div>
-          <span class="text-slate-400 block font-bold">合格者平均</span>
-          <span class="font-black text-slate-700 text-sm">219.5点</span>
+          <span class="text-slate-400 block font-medium">合格者平均</span>
+          <span class="font-black text-slate-200 text-sm" id="bannerPassAvg">219.5点</span>
         </div>
-        <div class="hidden sm:block h-6 w-px bg-slate-200"></div>
         <div>
-          <span class="text-slate-400 block font-bold">合格最低点</span>
-          <span class="font-black text-rose-600 text-sm">202.0点</span>
+          <span class="text-slate-400 block font-medium">合格最低点</span>
+          <span class="font-black text-amber-400 text-sm" id="bannerPassMin">202.0点</span>
         </div>
       </div>
     </div>
@@ -85,7 +107,7 @@
           <div class="flex justify-between items-center border-b pb-3 mb-4">
             <h3 class="font-black text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-pen-to-square text-blue-600"></i>
-              得点入力 (2025年度)
+              得点入力
             </h3>
             <span class="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> リアルタイム計算
@@ -93,79 +115,21 @@
           </div>
 
           <form id="scoreForm" oninput="calculateAll()" class="space-y-4">
-            <!-- 国語 -->
-            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-              <div class="flex justify-between items-center">
-                <label for="input_japanese" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> 国語
-                </label>
-                <div class="flex items-center gap-1.5">
-                  <input type="number" id="input_japanese" min="0" max="85" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
-                  <span class="text-xs font-bold text-slate-500">/ 85点</span>
-                </div>
-              </div>
-              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
-                <span>受験者平均: <b>40.4</b>点</span>
-                <span>合格者平均: <b>50.1</b>点</span>
-              </div>
-            </div>
-
-            <!-- 算数 -->
-            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-              <div class="flex justify-between items-center">
-                <label for="input_math" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 算数
-                </label>
-                <div class="flex items-center gap-1.5">
-                  <input type="number" id="input_math" min="0" max="85" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
-                  <span class="text-xs font-bold text-slate-500">/ 85点</span>
-                </div>
-              </div>
-              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
-                <span>受験者平均: <b>46.9</b>点</span>
-                <span>合格者平均: <b>55.2</b>点</span>
-              </div>
-            </div>
-
-            <!-- 社会 -->
-            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-              <div class="flex justify-between items-center">
-                <label for="input_society" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 社会
-                </label>
-                <div class="flex items-center gap-1.5">
-                  <input type="number" id="input_society" min="0" max="70" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
-                  <span class="text-xs font-bold text-slate-500">/ 70点</span>
-                </div>
-              </div>
-              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
-                <span>受験者平均: <b>52.9</b>点</span>
-                <span>合格者平均: <b>57.0</b>点</span>
-              </div>
-            </div>
-
-            <!-- 理科 -->
-            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
-              <div class="flex justify-between items-center">
-                <label for="input_science" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 理科
-                </label>
-                <div class="flex items-center gap-1.5">
-                  <input type="number" id="input_science" min="0" max="70" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
-                  <span class="text-xs font-bold text-slate-500">/ 70点</span>
-                </div>
-              </div>
-              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
-                <span>受験者平均: <b>52.0</b>点</span>
-                <span>合格者平均: <b>57.2</b>点</span>
-              </div>
+            <!-- Dynamic Subject Inputs Container -->
+            <div id="subjectInputsContainer" class="space-y-3">
+              <!-- Injected JS -->
             </div>
           </form>
         </div>
 
-        <button onclick="resetScores()" class="mt-4 w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2 border border-dashed border-slate-300 rounded-lg hover:bg-slate-50">
-          <i class="fa-solid fa-rotate-left"></i> 入力内容をクリア
-        </button>
+        <div class="pt-4 space-y-2">
+          <button onclick="saveResultToSupabase()" class="w-full text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center justify-center gap-1.5 py-2.5 rounded-xl shadow-sm">
+            <i class="fa-solid fa-cloud-arrow-up"></i> この演習結果を保存する
+          </button>
+          <button onclick="resetScores()" class="w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2 border border-dashed border-slate-300 rounded-xl hover:bg-slate-50">
+            <i class="fa-solid fa-rotate-left"></i> 入力クリア
+          </button>
+        </div>
       </div>
 
       <!-- Right Column: Results & Analysis -->
@@ -176,10 +140,10 @@
           
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
             <div>
-              <span class="text-xs font-bold text-slate-400 block mb-1">2025年度 過去問演習 総合結果</span>
+              <span class="text-xs font-bold text-slate-400 block mb-1">合格可能性（過去問データ基準）</span>
               <div class="flex items-baseline gap-2">
                 <h3 class="text-5xl font-black text-slate-800 tracking-tight" id="probabilityText">0%</h3>
-                <span class="text-xs text-slate-500 font-bold">（推定合格可能性）</span>
+                <span class="text-xs text-slate-500 font-bold">（推定判定）</span>
               </div>
             </div>
 
@@ -195,38 +159,38 @@
             </div>
           </div>
 
-          <!-- Total Score & Estimated Deviation Summary Grid -->
+          <!-- Total Score & Deviation Summary Grid -->
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-6 text-center">
             
             <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
               <span class="text-[11px] text-slate-400 font-bold block">4科合計点</span>
               <span class="text-2xl font-black text-slate-800" id="displayTotalScore">0</span>
-              <span class="text-[10px] text-slate-400 block">/ 310点満点</span>
+              <span class="text-[10px] text-slate-400 block" id="displayTotalFull">/ 310点満点</span>
             </div>
 
             <div class="bg-blue-50/70 p-3 rounded-xl border border-blue-100/80">
               <span class="text-[11px] text-blue-600 font-bold block">4科 推定偏差値</span>
               <span class="text-2xl font-black text-blue-700" id="displayTotalDev">--</span>
-              <span class="text-[10px] text-blue-400 block">大手模試基準換算</span>
+              <span class="text-[10px] text-blue-500 block font-medium">受験者平均 = 偏差値50.0</span>
             </div>
 
             <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2 sm:col-span-1">
               <span class="text-[11px] text-slate-400 font-bold block">合格最低点との差</span>
               <span class="text-2xl font-black text-slate-800" id="displayDiffScore">--</span>
-              <span class="text-[10px] text-slate-400 block" id="diffSubtitle">合格ボーダー: 202.0点</span>
+              <span class="text-[10px] text-slate-400 block" id="diffSubtitle">ボーダー: --点</span>
             </div>
 
           </div>
         </div>
 
-        <!-- Subject Performance Breakdown Table & Bars -->
+        <!-- Subject Breakdown Table & Bars -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
           <div class="flex justify-between items-center border-b pb-3">
             <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
               <i class="fa-solid fa-chart-column text-blue-600"></i>
-              科目別 分析データ（平均点・推定偏差値）
+              科目別 分析データ（受験者基準 偏差値）
             </h3>
-            <span class="text-xs text-slate-400 font-normal">■ キミの得点 / 受験者平均 / 合格平均</span>
+            <span class="text-[11px] text-slate-400 font-normal">■ 平均点＝偏差値50.0換算</span>
           </div>
 
           <!-- Table View for Subject Metrics -->
@@ -253,116 +217,484 @@
           </div>
         </div>
 
+        <!-- Saved History Section -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+          <div class="flex justify-between items-center border-b pb-3">
+            <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-clock-rotate-left text-amber-500"></i>
+              演習保存履歴
+            </h3>
+            <button onclick="loadHistory()" class="text-xs text-blue-600 hover:text-blue-800 font-bold">更新</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th class="p-2">日時</th>
+                  <th class="p-2">学校・年度</th>
+                  <th class="p-2 text-right">4科合計</th>
+                  <th class="p-2 text-right">偏差値</th>
+                  <th class="p-2 text-right">可能性</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                <tr><td colspan="5" class="p-4 text-center text-slate-400">履歴はありません</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
     </div>
   </main>
 
-  <!-- JavaScript Calculation Engine -->
+  <!-- Supabase Config Modal -->
+  <div id="configModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white max-w-lg w-full rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="font-bold text-base text-slate-800"><i class="fa-solid fa-database text-amber-500 mr-2"></i>Supabase 連携設定</h3>
+        <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">
+        埋め込み済みの接続情報で連携されています。テーブル未作成の場合は、下のSQLを実行してください。
+      </p>
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="font-bold text-slate-700 block mb-1">Supabase Project URL</label>
+          <input type="text" id="supabaseUrlInput" placeholder="https://your-project.supabase.co" class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-600">
+        </div>
+        <div>
+          <label class="font-bold text-slate-700 block mb-1">Supabase Publishable / Anon Key</label>
+          <input type="password" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1NiI..." class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-600">
+        </div>
+      </div>
+
+      <!-- SQL Display Toggle -->
+      <div class="border-t pt-3 space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-bold text-slate-700"><i class="fa-solid fa-code text-blue-500 mr-1"></i>テーブル作成用 SQL</span>
+          <button onclick="copySQL()" class="text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+            <i class="fa-regular fa-copy"></i> SQLをコピー
+          </button>
+        </div>
+        <textarea id="sqlSnippet" readonly class="w-full h-32 text-[10px] font-mono bg-slate-900 text-slate-200 p-2.5 rounded-xl border border-slate-700 resize-none outline-none leading-relaxed">CREATE TABLE IF NOT EXISTS public.past_paper_masters (
+  id TEXT PRIMARY KEY,
+  "schoolName" TEXT NOT NULL,
+  year INT NOT NULL,
+  "fullScore" NUMERIC NOT NULL,
+  "passMin" NUMERIC NOT NULL,
+  "passAvg" NUMERIC NOT NULL,
+  "totalAvg" NUMERIC NOT NULL,
+  subjects JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.past_paper_results (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  school_name TEXT NOT NULL,
+  year INT NOT NULL,
+  total_score NUMERIC NOT NULL,
+  estimated_dev TEXT,
+  probability TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.past_paper_masters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.past_paper_results ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read/write on past_paper_masters" ON public.past_paper_masters FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read/write on past_paper_results" ON public.past_paper_results FOR ALL USING (true) WITH CHECK (true);
+
+INSERT INTO public.past_paper_masters (id, "schoolName", year, "fullScore", "passMin", "passAvg", "totalAvg", subjects)
+VALUES (
+  'kaisei_2025', '開成中学校', 2025, 310, 202.0, 219.5, 192.2,
+  '{"japanese": {"name": "国語", "max": 85, "avg": 40.4, "passAvg": 50.1}, "math": {"name": "算数", "max": 85, "avg": 46.9, "passAvg": 55.2}, "society": {"name": "社会", "max": 70, "avg": 52.9, "passAvg": 57.0}, "science": {"name": "理科", "max": 70, "avg": 52.0, "passAvg": 57.2}}'::jsonb
+) ON CONFLICT (id) DO NOTHING;</textarea>
+      </div>
+
+      <div class="flex gap-2 pt-2">
+        <button onclick="saveSupabaseConfig()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs">設定を保存して接続テスト</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Master Data Modal -->
+  <div id="addMasterModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white max-w-lg w-full rounded-2xl p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="font-bold text-base text-slate-800"><i class="fa-solid fa-plus-circle text-blue-600 mr-2"></i>学校・年度マスターデータの新規登録</h3>
+        <button onclick="closeAddMasterModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <form id="addMasterForm" onsubmit="submitNewMaster(event)" class="space-y-4 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="font-bold text-slate-700 block mb-1">学校名</label>
+            <input type="text" id="newSchoolName" required placeholder="例: 麻布中学校" class="w-full p-2.5 border rounded-lg font-bold">
+          </div>
+          <div>
+            <label class="font-bold text-slate-700 block mb-1">年度</label>
+            <input type="number" id="newYear" required placeholder="例: 2025" class="w-full p-2.5 border rounded-lg font-bold">
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-3 rounded-xl border space-y-2">
+          <span class="font-bold text-slate-700 block border-b pb-1">全体判定基準データ</span>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-slate-500 block">4科合計満点</label>
+              <input type="number" id="newFullScore" required placeholder="310" class="w-full p-2 border rounded">
+            </div>
+            <div>
+              <label class="text-slate-500 block">合格最低点</label>
+              <input type="number" step="0.1" id="newPassMin" required placeholder="202" class="w-full p-2 border rounded font-bold text-rose-600">
+            </div>
+            <div>
+              <label class="text-slate-500 block">受験者平均点</label>
+              <input type="number" step="0.1" id="newTotalAvg" required placeholder="192.2" class="w-full p-2 border rounded">
+            </div>
+            <div>
+              <label class="text-slate-500 block">合格者平均点</label>
+              <input type="number" step="0.1" id="newPassAvg" required placeholder="219.5" class="w-full p-2 border rounded">
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <span class="font-bold text-slate-700 block border-b pb-1">各科目の配点・平均点</span>
+          
+          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+            <span class="font-bold text-slate-700">国語</span>
+            <input type="number" id="newJapMax" required placeholder="満点(85)" class="p-1.5 border rounded">
+            <input type="number" step="0.1" id="newJapAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
+          </div>
+          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+            <span class="font-bold text-slate-700">算数</span>
+            <input type="number" id="newMathMax" required placeholder="満点(85)" class="p-1.5 border rounded">
+            <input type="number" step="0.1" id="newMathAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
+          </div>
+          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+            <span class="font-bold text-slate-700">社会</span>
+            <input type="number" id="newSocMax" required placeholder="満点(70)" class="p-1.5 border rounded">
+            <input type="number" step="0.1" id="newSocAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
+          </div>
+          <div class="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+            <span class="font-bold text-slate-700">理科</span>
+            <input type="number" id="newSciMax" required placeholder="満点(70)" class="p-1.5 border rounded">
+            <input type="number" step="0.1" id="newSciAvg" required placeholder="受験者平均" class="p-1.5 border rounded">
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl">マスターデータを登録</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
-    // 2025年度 開成中学校 公式データマスタ
-    const data2025 = {
-      fullScore: 310,
-      passMin: 202.0,
-      passAvg: 219.5,
-      totalAvg: 192.2,
-      subjects: {
-        japanese: { name: "国語", max: 85, avg: 40.4, passAvg: 50.1 },
-        math:     { name: "算数", max: 85, avg: 46.9, passAvg: 55.2 },
-        society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
-        science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
+    // デフォルトのSupabase接続情報（埋め込み）
+    const DEFAULT_SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
+    const DEFAULT_SUPABASE_KEY = "Sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
+
+    // トースト通知関数（alertの代替）
+    function showToast(message, type = "success") {
+      const toast = document.getElementById("toast");
+      const icon = document.getElementById("toastIcon");
+      const msg = document.getElementById("toastMessage");
+
+      msg.innerText = message;
+      if (type === "error") {
+        icon.className = "fa-solid fa-circle-xmark text-rose-400 text-base";
+      } else if (type === "info") {
+        icon.className = "fa-solid fa-circle-info text-blue-400 text-base";
+      } else {
+        icon.className = "fa-solid fa-circle-check text-emerald-400 text-base";
       }
+
+      toast.classList.remove("translate-y-20", "opacity-0");
+      toast.classList.add("translate-y-0", "opacity-100");
+
+      setTimeout(() => {
+        toast.classList.remove("translate-y-0", "opacity-100");
+        toast.classList.add("translate-y-20", "opacity-0");
+      }, 3000);
+    }
+
+    // 初期定義：学校・年度マスターのローカルデータ
+    const initialMasters = [
+      {
+        id: "kaisei_2025",
+        schoolName: "開成中学校",
+        year: 2025,
+        fullScore: 310,
+        passMin: 202.0,
+        passAvg: 219.5,
+        totalAvg: 192.2,
+        subjects: {
+          japanese: { name: "国語", max: 85, avg: 40.4, passAvg: 50.1 },
+          math:     { name: "算数", max: 85, avg: 46.9, passAvg: 55.2 },
+          society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
+          science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
+        }
+      },
+      {
+        id: "kaisei_2026",
+        schoolName: "開成中学校",
+        year: 2026,
+        fullScore: 310,
+        passMin: 205.0,
+        passAvg: 222.7,
+        totalAvg: 193.4,
+        subjects: {
+          japanese: { name: "国語", max: 85, avg: 50.3, passAvg: 57.0 },
+          math:     { name: "算数", max: 85, avg: 41.6, passAvg: 54.8 },
+          society:  { name: "社会", max: 70, avg: 52.8, passAvg: 55.9 },
+          science:  { name: "理科", max: 70, avg: 48.7, passAvg: 55.0 }
+        }
+      }
+    ];
+
+    let masterList = [...initialMasters];
+    let currentMaster = masterList[0];
+    let supabaseClient = null;
+
+    // 初期化ハンドラ
+    window.onload = async () => {
+      initSupabase();
+      await loadMasters();
+      renderMasterSelect();
+      renderSubjectInputs();
+      calculateAll();
+      loadHistory();
     };
 
-    window.onload = () => {
+    // Supabase クライアント初期化
+    function initSupabase() {
+      const url = localStorage.getItem("sb_url") || DEFAULT_SUPABASE_URL;
+      const key = localStorage.getItem("sb_key") || DEFAULT_SUPABASE_KEY;
+      
+      document.getElementById("supabaseUrlInput").value = url;
+      document.getElementById("supabaseKeyInput").value = key;
+
+      if (url && key && window.supabase) {
+        try {
+          supabaseClient = window.supabase.createClient(url, key);
+        } catch(e) {
+          console.warn("Supabase initialization error:", e);
+        }
+      }
+    }
+
+    // マスターデータ読み込み
+    async function loadMasters() {
+      const localCustom = localStorage.getItem("custom_masters");
+      let customLocalList = [];
+      if (localCustom) {
+        try {
+          customLocalList = JSON.parse(localCustom);
+        } catch(e) { console.error(e); }
+      }
+
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient.from("past_paper_masters").select("*");
+          if (!error && data && data.length > 0) {
+            masterList = [...data];
+            return;
+          }
+        } catch(e) { console.warn("Supabase fetch failed, fallback to local:", e); }
+      }
+
+      masterList = [...initialMasters, ...customLocalList];
+    }
+      },
+      {
+        id: "kaisei_2026",
+        schoolName: "開成中学校",
+        year: 2026,
+        fullScore: 310,
+        passMin: 205.0,
+        passAvg: 222.7,
+        totalAvg: 193.4,
+        subjects: {
+          japanese: { name: "国語", max: 85, avg: 50.3, passAvg: 57.0 },
+          math:     { name: "算数", max: 85, avg: 41.6, passAvg: 54.8 },
+          society:  { name: "社会", max: 70, avg: 52.8, passAvg: 55.9 },
+          science:  { name: "理科", max: 70, avg: 48.7, passAvg: 55.0 }
+        }
+      }
+    ];
+
+    let masterList = [...initialMasters];
+    let currentMaster = masterList[0];
+    let supabaseClient = null;
+
+    // 初期化ハンドラ
+    window.onload = async () => {
+      initSupabase();
+      await loadMasters();
+      renderMasterSelect();
+      renderSubjectInputs();
       calculateAll();
+      loadHistory();
     };
+
+    // Supabase クライアント初期化
+    function initSupabase() {
+      const url = localStorage.getItem("sb_url");
+      const key = localStorage.getItem("sb_key");
+      if (url && key && window.supabase) {
+        supabaseClient = window.supabase.createClient(url, key);
+        document.getElementById("supabaseUrlInput").value = url;
+        document.getElementById("supabaseKeyInput").value = key;
+      }
+    }
+
+    // マスターデータ読み込み
+    async function loadMasters() {
+      const localCustom = localStorage.getItem("custom_masters");
+      if (localCustom) {
+        try {
+          const parsed = JSON.parse(localCustom);
+          masterList = [...initialMasters, ...parsed];
+        } catch(e) { console.error(e); }
+      }
+
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient.from("past_paper_masters").select("*");
+          if (!error && data && data.length > 0) {
+            masterList = [...initialMasters, ...data];
+          }
+        } catch(e) { console.warn("Supabase fetch failed, fallback to local:", e); }
+      }
+    }
+
+    // ドロップダウン更新
+    function renderMasterSelect() {
+      const select = document.getElementById("masterSelect");
+      select.innerHTML = "";
+      masterList.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.innerText = `${m.schoolName} (${m.year}年度)`;
+        select.appendChild(opt);
+      });
+      select.value = currentMaster.id;
+      updateBanner();
+    }
+
+    function onMasterChange() {
+      const selectVal = document.getElementById("masterSelect").value;
+      currentMaster = masterList.find(m => m.id === selectVal) || masterList[0];
+      updateBanner();
+      renderSubjectInputs();
+      calculateAll();
+    }
+
+    // バナーの表示更新
+    function updateBanner() {
+      document.getElementById("bannerYearBadge").innerText = `${currentMaster.year}年度`;
+      document.getElementById("bannerSchoolName").innerText = currentMaster.schoolName;
+      document.getElementById("bannerFullScore").innerText = `${currentMaster.fullScore}点`;
+      document.getElementById("bannerTotalAvg").innerText = `${currentMaster.totalAvg}点`;
+      document.getElementById("bannerPassAvg").innerText = `${currentMaster.passAvg}点`;
+      document.getElementById("bannerPassMin").innerText = `${currentMaster.passMin}点`;
+      document.getElementById("displayTotalFull").innerText = `/ ${currentMaster.fullScore}点満点`;
+      document.getElementById("diffSubtitle").innerText = `ボーダー: ${currentMaster.passMin}点`;
+    }
+
+    // 得点入力フォーム動的生成
+    function renderSubjectInputs() {
+      const container = document.getElementById("subjectInputsContainer");
+      container.innerHTML = "";
+
+      const colorMap = { japanese: "rose-500", math: "blue-500", society: "amber-500", science: "emerald-500" };
+
+      Object.keys(currentMaster.subjects).forEach(key => {
+        const sub = currentMaster.subjects[key];
+        const dotColor = colorMap[key] || "slate-500";
+
+        const div = document.createElement("div");
+        div.className = "bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1.5";
+        div.innerHTML = `
+          <div class="flex justify-between items-center">
+            <label for="input_${key}" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-${dotColor}"></span> ${sub.name}
+            </label>
+            <div class="flex items-center gap-1.5">
+              <input type="number" id="input_${key}" min="0" max="${sub.max}" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+              <span class="text-xs font-bold text-slate-500">/ ${sub.max}点</span>
+            </div>
+          </div>
+          <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
+            <span>受験者平均: <b>${sub.avg}</b>点</span>
+            <span>合格者平均: <b>${sub.passAvg || '--'}</b>点</span>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
 
     function resetScores() {
-      document.getElementById("input_japanese").value = "";
-      document.getElementById("input_math").value = "";
-      document.getElementById("input_society").value = "";
-      document.getElementById("input_science").value = "";
+      Object.keys(currentMaster.subjects).forEach(key => {
+        const input = document.getElementById(`input_${key}`);
+        if (input) input.value = "";
+      });
       calculateAll();
     }
 
-    // 各科目の推定偏差値（大手模試・四谷/日能研/サピックス等の中学受験模試基準に換算）
-    // 受験者平均点 ≒ 偏差値65.0 (開成受験層の平均)
-    // 合格者平均点 ≒ 偏差値72.0 基準で算出
+    // 【受験者平均基準】の偏差値算出ロジック
+    // 受験者平均点 = 偏差値 50.0
+    // 各教科の標準偏差(SD)の推定: 満点の約 18% 程度と仮定
     function calcSubjectDev(score, subData) {
       if (score === 0 || isNaN(score)) return 0;
-      
       const avg = subData.avg;
-      const passAvg = subData.passAvg;
-      const diffPass = passAvg - avg; // 合格者平均と受験者平均の差
-
-      // 受験者平均＝偏差値65、合格者平均＝偏差値72 (差7ポイント)
-      // 1点あたりの偏差値変動量 = 7.0 / diffPass
-      const devPerPoint = diffPass > 0 ? (7.0 / diffPass) : 0.5;
+      const sd = subData.max * 0.18; // 推定標準偏差
       
-      let dev = 65.0 + (score - avg) * devPerPoint;
-      
-      // 上限・下限の調整 (30.0 ~ 85.0)
-      dev = Math.min(85.0, Math.max(30.0, dev));
-      return Math.round(dev * 10) / 10;
+      const dev = 50.0 + (10 * (score - avg) / sd);
+      return Math.round(Math.min(85.0, Math.max(25.0, dev)) * 10) / 10;
     }
 
-    // 4科合計の推定偏差値
+    // 4科合計の受験者基準偏差値
     function calcTotalDev(totalScore) {
       if (totalScore === 0 || isNaN(totalScore)) return 0;
-
-      const avg = data2025.totalAvg;   // 192.2
-      const min = data2025.passMin;    // 202.0
-      const passAvg = data2025.passAvg;// 219.5
-
-      let dev = 65.0; // 受験者平均(192.2)で偏差値65.0
-
-      if (totalScore >= avg) {
-        // 合格者平均(219.5)で偏差値72.0、合格最低点(202.0)で偏差値68.0
-        const devPerPoint = (72.0 - 65.0) / (passAvg - avg); // 7.0 / 27.3 ≈ 0.256
-        dev = 65.0 + (totalScore - avg) * devPerPoint;
-      } else {
-        // 平均未満
-        const devPerPoint = 0.25;
-        dev = 65.0 + (totalScore - avg) * devPerPoint;
-      }
-
-      dev = Math.min(85.0, Math.max(30.0, dev));
-      return Math.round(dev * 10) / 10;
+      const avg = currentMaster.totalAvg;
+      const sd = currentMaster.fullScore * 0.15; // 4科合計の推定標準偏差
+      
+      const dev = 50.0 + (10 * (totalScore - avg) / sd);
+      return Math.round(Math.min(85.0, Math.max(25.0, dev)) * 10) / 10;
     }
 
     // 合格可能性(%) 計算ロジック
     function calcProbability(totalScore, hasInput) {
       if (!hasInput || totalScore === 0) return { prob: 0, rank: "--", title: "点数を入力してください", badgeClass: "bg-slate-200 text-slate-600" };
 
-      const min = data2025.passMin;   // 202.0
-      const passAvg = data2025.passAvg; // 219.5
-      const avg = data2025.totalAvg;  // 192.2
+      const min = currentMaster.passMin;
+      const passAvg = currentMaster.passAvg;
+      const avg = currentMaster.totalAvg;
 
       let prob = 0;
 
       if (totalScore >= passAvg) {
-        // 合格者平均(219.5点)以上: 80% 〜 95%
-        const extra = ((totalScore - passAvg) / (data2025.fullScore - passAvg)) * 15;
+        const extra = ((totalScore - passAvg) / (currentMaster.fullScore - passAvg)) * 15;
         prob = Math.min(95, Math.round(80 + extra));
       } else if (totalScore >= min) {
-        // 合格最低点(202点) 〜 合格者平均(219.5点): 50% 〜 80%
         const ratio = (totalScore - min) / (passAvg - min);
         prob = Math.round(50 + ratio * 30);
       } else if (totalScore >= avg) {
-        // 受験者平均(192.2点) 〜 合格最低点(202点): 30% 〜 50%
         const ratio = (totalScore - avg) / (min - avg);
         prob = Math.round(30 + ratio * 20);
       } else {
-        // 受験者平均未満: 10% 〜 30%
         const ratio = Math.max(0, totalScore / avg);
         prob = Math.max(10, Math.round(ratio * 30));
       }
 
-      // 10%刻みに丸め込み
       prob = Math.round(prob / 5) * 5;
 
       let rank = "E";
-      let title = "再強化圏 (基礎力底上げが必要)";
+      let title = "要再考・基礎強化 (最低点との差大)";
       let badgeClass = "bg-rose-500 text-white shadow-rose-200";
 
       if (prob >= 80) {
@@ -386,45 +718,39 @@
       return { prob, rank, title, badgeClass };
     }
 
-    // 全体計算・UI更新
+    // 全体計算およびUIレンダリング
     function calculateAll() {
-      const scores = {
-        japanese: parseFloat(document.getElementById("input_japanese").value) || 0,
-        math:     parseFloat(document.getElementById("input_math").value) || 0,
-        society:  parseFloat(document.getElementById("input_society").value) || 0,
-        science:  parseFloat(document.getElementById("input_science").value) || 0
-      };
+      const keys = Object.keys(currentMaster.subjects);
+      const scores = {};
+      const inputs = [];
 
-      const inputs = ["japanese", "math", "society", "science"].map(s => document.getElementById(`input_${s}`).value);
+      keys.forEach(key => {
+        const val = document.getElementById(`input_${key}`)?.value || "";
+        inputs.push(val);
+        scores[key] = parseFloat(val) || 0;
+      });
+
       const hasInput = inputs.some(val => val !== "");
+      const totalScore = keys.reduce((sum, key) => sum + scores[key], 0);
 
-      // 4科合計
-      const totalScore = scores.japanese + scores.math + scores.society + scores.science;
-
-      // 推定偏差値計算
       const totalDev = hasInput ? calcTotalDev(totalScore) : "--";
-      const subjectDevs = {
-        japanese: scores.japanese > 0 || inputs[0] !== "" ? calcSubjectDev(scores.japanese, data2025.subjects.japanese) : "--",
-        math:     scores.math > 0 || inputs[1] !== "" ? calcSubjectDev(scores.math, data2025.subjects.math) : "--",
-        society:  scores.society > 0 || inputs[2] !== "" ? calcSubjectDev(scores.society, data2025.subjects.society) : "--",
-        science:  scores.science > 0 || inputs[3] !== "" ? calcSubjectDev(scores.science, data2025.subjects.science) : "--"
-      };
+      const subjectDevs = {};
+      keys.forEach((key, idx) => {
+        subjectDevs[key] = inputs[idx] !== "" ? calcSubjectDev(scores[key], currentMaster.subjects[key]) : "--";
+      });
 
-      // 合格判定
       const evalRes = calcProbability(totalScore, hasInput);
 
-      // --- UI更新 ---
+      // UI反映
       document.getElementById("probabilityText").innerText = hasInput ? `${evalRes.prob}%` : "0%";
       document.getElementById("rankBadge").innerText = evalRes.rank;
       document.getElementById("rankBadge").className = `text-3xl font-black px-5 py-2.5 rounded-2xl shadow-md transition-all duration-300 ${evalRes.badgeClass}`;
       document.getElementById("rankTitle").innerText = evalRes.title;
 
-      // 4科合計 & 推定偏差値
       document.getElementById("displayTotalScore").innerText = hasInput ? totalScore : 0;
       document.getElementById("displayTotalDev").innerText = hasInput ? totalDev : "--";
 
-      // 最低点との差
-      const diffMin = totalScore - data2025.passMin;
+      const diffMin = totalScore - currentMaster.passMin;
       const diffElem = document.getElementById("displayDiffScore");
       if (!hasInput) {
         diffElem.innerText = "--";
@@ -437,18 +763,16 @@
         diffElem.className = "text-2xl font-black text-rose-600";
       }
 
-      // テーブルとバーのレンダリング
       renderSubjectTable(scores, subjectDevs, inputs);
-      renderSubjectBars(scores, data2025);
+      renderSubjectBars(scores);
     }
 
-    // 科目別データテーブル描画
     function renderSubjectTable(scores, devs, inputs) {
       const tbody = document.getElementById("subjectTableBody");
       tbody.innerHTML = "";
 
-      Object.keys(data2025.subjects).forEach((key, index) => {
-        const sub = data2025.subjects[key];
+      Object.keys(currentMaster.subjects).forEach((key, index) => {
+        const sub = currentMaster.subjects[key];
         const userScore = inputs[index] !== "" ? scores[key] : "--";
         const devVal = devs[key];
 
@@ -458,25 +782,24 @@
           <td class="p-2.5 font-bold text-slate-800">${sub.name} <span class="text-[10px] text-slate-400 font-normal">(満点${sub.max})</span></td>
           <td class="p-2.5 text-right font-black text-slate-900">${userScore}${inputs[index] !== "" ? '点' : ''}</td>
           <td class="p-2.5 text-right text-slate-500">${sub.avg}点</td>
-          <td class="p-2.5 text-right text-slate-500">${sub.passAvg}点</td>
+          <td class="p-2.5 text-right text-slate-500">${sub.passAvg || '--'}点</td>
           <td class="p-2.5 text-right font-black text-blue-600 text-sm">${devVal !== "--" ? devVal : '--'}</td>
         `;
         tbody.appendChild(tr);
       });
     }
 
-    // 科目別比較バー描画
-    function renderSubjectBars(scores, data) {
+    function renderSubjectBars(scores) {
       const container = document.getElementById("subjectBarContainer");
       container.innerHTML = "";
 
-      Object.keys(data.subjects).forEach(key => {
-        const sub = data.subjects[key];
+      Object.keys(currentMaster.subjects).forEach(key => {
+        const sub = currentMaster.subjects[key];
         const userScore = scores[key];
 
         const userPercent = Math.min(100, (userScore / sub.max) * 100);
         const avgPercent = (sub.avg / sub.max) * 100;
-        const passAvgPercent = (sub.passAvg / sub.max) * 100;
+        const passAvgPercent = sub.passAvg ? (sub.passAvg / sub.max) * 100 : null;
 
         const html = `
           <div class="space-y-1.5 text-xs">
@@ -484,24 +807,161 @@
               <span class="flex items-center gap-1.5">${sub.name} <span class="text-slate-400 font-normal">(満点${sub.max}点)</span></span>
               <span>
                 キミ: <strong class="text-blue-600 font-black text-sm">${userScore}</strong>点 
-                <span class="text-slate-400 font-normal"> / 受験者平均${sub.avg}点 / 合格平均${sub.passAvg}点</span>
+                <span class="text-slate-400 font-normal"> / 受験者平均${sub.avg}点</span>
               </span>
             </div>
             
             <div class="relative w-full h-3.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-              <!-- 受験者平均ゾーン (灰) -->
-              <div class="absolute top-0 bottom-0 bg-slate-250 opacity-50" style="width: ${avgPercent}%;"></div>
-              
-              <!-- 合格者平均ライン (縦線マーカー) -->
-              <div class="absolute top-0 bottom-0 w-1 bg-amber-500 z-20 shadow-sm" style="left: calc(${passAvgPercent}% - 2px);" title="合格者平均: ${sub.passAvg}点"></div>
-
-              <!-- キミの得点バー (青) -->
+              <div class="absolute top-0 bottom-0 bg-slate-300 opacity-60" style="width: ${avgPercent}%;" title="受験者平均: ${sub.avg}点"></div>
+              ${passAvgPercent ? `<div class="absolute top-0 bottom-0 w-1 bg-amber-500 z-20" style="left: calc(${passAvgPercent}% - 2px);" title="合格者平均: ${sub.passAvg}点"></div>` : ''}
               <div class="absolute top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-300 opacity-90 z-10" style="width: ${userPercent}%;"></div>
             </div>
           </div>
         `;
         container.innerHTML += html;
       });
+    }
+
+    async function saveResultToSupabase() {
+      const totalScore = parseFloat(document.getElementById("displayTotalScore").innerText) || 0;
+      if (totalScore === 0) {
+        showToast("得点を入力してください。", "info");
+        return;
+      }
+
+      const totalDev = document.getElementById("displayTotalDev").innerText;
+      const probText = document.getElementById("probabilityText").innerText;
+
+      const record = {
+        school_name: currentMaster.schoolName,
+        year: currentMaster.year,
+        total_score: totalScore,
+        estimated_dev: totalDev,
+        probability: probText,
+        created_at: new Date().toLocaleString()
+      };
+
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from("past_paper_results").insert([record]);
+        } catch(e) { console.warn("Supabase insert error:", e); }
+      }
+
+      // ローカルストレージ保存
+      const history = JSON.parse(localStorage.getItem("paper_history") || "[]");
+      history.unshift(record);
+      localStorage.setItem("paper_history", JSON.stringify(history));
+
+      showToast("演習結果を保存しました。");
+      loadHistory();
+    }
+
+    async function loadHistory() {
+      const tbody = document.getElementById("historyTableBody");
+      let history = [];
+
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient.from("past_paper_results").select("*").order("created_at", { ascending: false }).limit(20);
+          if (!error && data && data.length > 0) {
+            history = data.map(d => ({
+              created_at: d.created_at ? new Date(d.created_at).toLocaleString() : '--',
+              school_name: d.school_name,
+              year: d.year,
+              total_score: d.total_score,
+              estimated_dev: d.estimated_dev,
+              probability: d.probability
+            }));
+          }
+        } catch(e) { console.warn(e); }
+      }
+
+      if (history.length === 0) {
+        history = JSON.parse(localStorage.getItem("paper_history") || "[]");
+      }
+
+      tbody.innerHTML = "";
+
+      if (history.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">履歴はありません</td></tr>`;
+        return;
+      }
+
+      history.slice(0, 10).forEach(h => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50";
+        tr.innerHTML = `
+          <td class="p-2 text-slate-400">${h.created_at || '--'}</td>
+          <td class="p-2 font-bold text-slate-800">${h.school_name} (${h.year})</td>
+          <td class="p-2 text-right font-black">${h.total_score}点</td>
+          <td class="p-2 text-right font-bold text-blue-600">${h.estimated_dev}</td>
+          <td class="p-2 text-right font-bold text-emerald-600">${h.probability}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // モーダル操作
+    function openConfigModal() { document.getElementById("configModal").classList.remove("hidden"); }
+    function closeConfigModal() { document.getElementById("configModal").classList.add("hidden"); }
+    
+    function saveSupabaseConfig() {
+      const url = document.getElementById("supabaseUrlInput").value.trim();
+      const key = document.getElementById("supabaseKeyInput").value.trim();
+      localStorage.setItem("sb_url", url);
+      localStorage.setItem("sb_key", key);
+      initSupabase();
+      closeConfigModal();
+      showToast("Supabase設定を更新しました。");
+    }
+
+    function copySQL() {
+      const sqlText = document.getElementById("sqlSnippet").value;
+      const textArea = document.createElement("textarea");
+      textArea.value = sqlText;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      showToast("SQL文をクリップボードにコピーしました！");
+    }
+
+    function openAddMasterModal() { document.getElementById("addMasterModal").classList.remove("hidden"); }
+    function closeAddMasterModal() { document.getElementById("addMasterModal").classList.add("hidden"); }
+
+    function submitNewMaster(e) {
+      e.preventDefault();
+      const newM = {
+        id: `custom_${Date.now()}`,
+        schoolName: document.getElementById("newSchoolName").value,
+        year: parseInt(document.getElementById("newYear").value),
+        fullScore: parseFloat(document.getElementById("newFullScore").value),
+        passMin: parseFloat(document.getElementById("newPassMin").value),
+        totalAvg: parseFloat(document.getElementById("newTotalAvg").value),
+        passAvg: parseFloat(document.getElementById("newPassAvg").value),
+        subjects: {
+          japanese: { name: "国語", max: parseFloat(document.getElementById("newJapMax").value), avg: parseFloat(document.getElementById("newJapAvg").value) },
+          math:     { name: "算数", max: parseFloat(document.getElementById("newMathMax").value), avg: parseFloat(document.getElementById("newMathAvg").value) },
+          society:  { name: "社会", max: parseFloat(document.getElementById("newSocMax").value), avg: parseFloat(document.getElementById("newSocAvg").value) },
+          science:  { name: "理科", max: parseFloat(document.getElementById("newSciMax").value), avg: parseFloat(document.getElementById("newSciAvg").value) }
+        }
+      };
+
+      masterList.push(newM);
+      const customMasters = JSON.parse(localStorage.getItem("custom_masters") || "[]");
+      customMasters.push(newM);
+      localStorage.setItem("custom_masters", JSON.stringify(customMasters));
+
+      if (supabaseClient) {
+        supabaseClient.from("past_paper_masters").insert([newM]).then();
+      }
+
+      currentMaster = newM;
+      renderMasterSelect();
+      renderSubjectInputs();
+      calculateAll();
+      closeAddMasterModal();
+      showToast("新しいマスターデータを追加しました。");
     }
   </script>
 </body>
