@@ -1,384 +1,508 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>開成過去問 合格可能性判定マイページ</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
-body {
-font-family: 'Noto Sans JP', sans-serif;
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>開成過去問 合格可能性＆推定偏差値 マイページ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+    }
+  </style>
 </head>
 <body class="bg-slate-100 min-h-screen text-slate-800 pb-12">
-<!-- Header -->
-<header class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
-<div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
-<div class="flex items-center gap-3">
-<div class="bg-amber-500 text-slate-900 font-black p-2 rounded-lg text-sm tracking-wider">
-MY PAGE
-</div>
-<div>
-<h1 class="font-bold text-lg leading-tight">過去問演習 合格判定ダッシュボード</h1>
-<p class="text-xs text-slate-400">開成中学校 過去問分析システム</p>
-</div>
-</div>
-<div class="flex items-center gap-2 text-xs text-slate-300">
-<i class="fa-solid fa-user-circle text-lg"></i>
-<span class="hidden sm:inline font-medium">生徒マイページ</span>
-</div>
-</div>
-</header>
-<!-- Main Container -->
-<main class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
-<!-- Top Controller: School & Year Select -->
-<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
-<div class="flex items-center gap-3">
-<div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl">
-<i class="fa-solid fa-school"></i>
-</div>
-<div>
-<span class="text-xs text-slate-400 font-bold block">対象校 / 対象年度</span>
-<div class="flex items-center gap-2">
-<span class="font-black text-slate-800 text-lg">開成中学校</span>
-<select id="yearSelect" onchange="switchYear()" class="bg-slate-100 border border-slate-300 text-slate-800 font-bold text-sm rounded-lg px-3 py-1 focus:ring-2 focus:ring-blue-500 outline-none">
-<option value="2025" selected>2025年度 (令和7)</option>
-<option value="2026">2026年度 (令和8)</option>
-</select>
-</div>
-</div>
-</div>
-<!-- Quick Benchmark Stats -->
-<div class="flex items-center gap-6 text-xs bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-<div class="text-center">
-<span class="text-slate-400 block font-bold">4科満点</span>
-<span class="font-black text-slate-700 text-sm" id="bmFullScore">310点</span>
-</div>
-<div class="h-6 w-px bg-slate-200"></div>
-<div class="text-center">
-<span class="text-slate-400 block font-bold">受験者平均</span>
-<span class="font-black text-slate-700 text-sm" id="bmAvgScore">192.2点</span>
-</div>
-<div class="h-6 w-px bg-slate-200"></div>
-<div class="text-center">
-<span class="text-slate-400 block font-bold">合格最低点</span>
-<span class="font-black text-rose-600 text-sm" id="bmMinScore">202点</span>
-</div>
-</div>
-</div>
-<!-- Main Content Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-<!-- Left Column: Score Input Form -->
-<div class="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
-<div>
-<div class="flex justify-between items-center border-b pb-3 mb-4">
-<h2 class="font-black text-slate-800 flex items-center gap-2">
-<i class="fa-solid fa-pen-to-square text-blue-600"></i>
-キミの得点を入力
-</h2>
-<span class="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-bold">自動計算中</span>
-</div>
-<form id="scoreForm" oninput="calculateResults()" class="space-y-4">
-<!-- 国語 -->
-<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-<div>
-<label class="font-bold text-slate-700 block text-sm">国語</label>
-<span class="text-xs text-slate-400">満点 85点 / 平均 <span id="avg_japanese">40.4</span>点</span>
-</div>
-<div class="flex items-center gap-2">
-<input type="number" id="input_japanese" min="0" max="85" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
-<span class="text-xs font-bold text-slate-500">点</span>
-</div>
-</div>
-<!-- 算数 -->
-<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-<div>
-<label class="font-bold text-slate-700 block text-sm">算数</label>
-<span class="text-xs text-slate-400">満点 85点 / 平均 <span id="avg_math">46.9</span>点</span>
-</div>
-<div class="flex items-center gap-2">
-<input type="number" id="input_math" min="0" max="85" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
-<span class="text-xs font-bold text-slate-500">点</span>
-</div>
-</div>
-<!-- 社会 -->
-<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-<div>
-<label class="font-bold text-slate-700 block text-sm">社会</label>
-<span class="text-xs text-slate-400">満点 70点 / 平均 <span id="avg_society">52.9</span>点</span>
-</div>
-<div class="flex items-center gap-2">
-<input type="number" id="input_society" min="0" max="70" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
-<span class="text-xs font-bold text-slate-500">点</span>
-</div>
-</div>
-<!-- 理科 -->
-<div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-<div>
-<label class="font-bold text-slate-700 block text-sm">理科</label>
-<span class="text-xs text-slate-400">満点 70点 / 平均 <span id="avg_science">52.0</span>点</span>
-</div>
-<div class="flex items-center gap-2">
-<input type="number" id="input_science" min="0" max="70" placeholder="0" class="w-20 text-right text-lg font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none">
-<span class="text-xs font-bold text-slate-500">点</span>
-</div>
-</div>
-</form>
-</div>
-<button onclick="resetScores()" class="mt-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2">
-<i class="fa-solid fa-rotate-left"></i> 入力内容をリセット
-</button>
-</div>
-<!-- Right Column: Results & Analysis -->
-<div class="lg:col-span-7 space-y-6">
-<!-- Probability Hero Card -->
-<div id="resultCard" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden transition-all duration-300">
-<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
-<div>
-<span class="text-xs font-bold text-slate-400 block mb-1">過去問判定結果</span>
-<div class="flex items-baseline gap-2">
-<h3 class="text-4xl font-black text-slate-800" id="probabilityText">0%</h3>
-<span class="text-xs text-slate-500 font-bold">（合格可能性）</span>
-</div>
-</div>
-<!-- Rank Badge -->
-<div class="flex items-center gap-3">
-<div id="rankBadge" class="bg-slate-200 text-slate-600 text-3xl font-black px-5 py-2 rounded-2xl shadow-inner tracking-wider">
---
-</div>
-<div>
-<span class="text-xs font-bold text-slate-400 block">総合判定</span>
-<span id="rankTitle" class="text-sm font-bold text-slate-700">点数を入力してください</span>
-</div>
-</div>
-</div>
-<!-- Total Score Summary Grid -->
-<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-6 text-center">
-<div class="bg-slate-50 p-3 rounded-xl">
-<span class="text-xs text-slate-400 font-bold block">4科合計点</span>
-<span class="text-2xl font-black text-slate-800" id="displayTotalScore">0</span>
-<span class="text-[10px] text-slate-400 block">/ 310点満点</span>
-</div>
-<div class="bg-slate-50 p-3 rounded-xl">
-<span class="text-xs text-slate-400 font-bold block">合格最低点との差</span>
-<span class="text-2xl font-black text-slate-800" id="displayDiffScore">--</span>
-<span class="text-[10px] text-slate-400 block" id="diffSubtitle">ボーダー: 202点</span>
-</div>
-<div class="bg-slate-50 p-3 rounded-xl col-span-2 sm:col-span-1">
-<span class="text-xs text-slate-400 font-bold block">合格者平均との差</span>
-<span class="text-2xl font-black text-slate-800" id="displayAvgDiffScore">--</span>
-<span class="text-[10px] text-slate-400 block" id="avgDiffSubtitle">平均: 219.5点</span>
-</div>
-</div>
-</div>
-<!-- Subject Breakdown Bars -->
-<div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-<h3 class="font-bold text-sm text-slate-700 flex items-center justify-between">
-<span><i class="fa-solid fa-chart-simple text-blue-600 mr-2"></i>科目別 得点比較</span>
-<span class="text-xs text-slate-400 font-normal">■ キミの得点 / ■ 受験者平均 / ■ 合格者平均</span>
-</h3>
-<div class="space-y-4 pt-2" id="subjectBarContainer">
-<!-- Subject Bars will be injected via JS -->
-</div>
-</div>
-</div>
-</div>
-</main>
-<!-- Script -->
-<script>
-// 開成中学校 過去問データベース
-const masterData = {
-"2025": {
-yearName: "2025年度 (令和7)",
-fullScore: 310,
-passMin: 202,
-passAvg: 219.5,
-totalAvg: 192.2,
-subjects: {
-japanese: { name: "国語", max: 85, avg: 40.4, passAvg: 50.1 },
-math:     { name: "算数", max: 85, avg: 46.9, passAvg: 55.2 },
-society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
-science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
-}
-},
-"2026": {
-yearName: "2026年度 (令和8)",
-fullScore: 310,
-passMin: 205,
-passAvg: 222.7,
-totalAvg: 193.4,
-subjects: {
-japanese: { name: "国語", max: 85, avg: 50.3, passAvg: 57.0 },
-math:     { name: "算数", max: 85, avg: 41.6, passAvg: 54.8 },
-society:  { name: "社会", max: 70, avg: 52.8, passAvg: 55.9 },
-science:  { name: "理科", max: 70, avg: 48.7, passAvg: 55.0 }
-}
-}
-};
-let currentYear = "2025";
-// 初期化
-window.onload = () => {
-switchYear();
-};
-// 年度切り替え
-function switchYear() {
-currentYear = document.getElementById("yearSelect").value;
-const data = masterData[currentYear];
-// ベンチマーク更新
-document.getElementById("bmFullScore").innerText = ⁠${data.fullScore}点⁠;
-document.getElementById("bmAvgScore").innerText = ⁠${data.totalAvg}点⁠;
-document.getElementById("bmMinScore").innerText = ⁠${data.passMin}点⁠;
-// 各科目ラベル更新
-document.getElementById("avg_japanese").innerText = data.subjects.japanese.avg;
-document.getElementById("avg_math").innerText = data.subjects.math.avg;
-document.getElementById("avg_society").innerText = data.subjects.society.avg;
-document.getElementById("avg_science").innerText = data.subjects.science.avg;
-// 再計算
-calculateResults();
-}
-// リセット
-function resetScores() {
-document.getElementById("input_japanese").value = "";
-document.getElementById("input_math").value = "";
-document.getElementById("input_society").value = "";
-document.getElementById("input_science").value = "";
-calculateResults();
-}
-// メイン計算処理
-function calculateResults() {
-const data = masterData[currentYear];
-// 得点取得
-const scores = {
-japanese: parseFloat(document.getElementById("input_japanese").value) || 0,
-math:     parseFloat(document.getElementById("input_math").value) || 0,
-society:  parseFloat(document.getElementById("input_society").value) || 0,
-science:  parseFloat(document.getElementById("input_science").value) || 0
-};
-// 合計点
-const totalScore = scores.japanese + scores.math + scores.society + scores.science;
-// 入力があるかチェック
-const hasInput = ["japanese", "math", "society", "science"].some(
-s => document.getElementById(⁠input_${s}⁠).value !== ""
-);
-// 合格可能性(%) 計算ロジック
-let probability = 0;
-let rank = "--";
-let rankTitle = "未入力";
-let badgeClass = "bg-slate-200 text-slate-600";
-if (hasInput) {
-if (totalScore >= data.passAvg) {
-// 合格者平均以上: 80% 〜 95%
-const extra = ((totalScore - data.passAvg) / (data.fullScore - data.passAvg)) * 15;
-probability = Math.min(95, Math.round(80 + extra));
-} else if (totalScore >= data.passMin) {
-// 合格最低点 〜 合格者平均: 50% 〜 80%
-const ratio = (totalScore - data.passMin) / (data.passAvg - data.passMin);
-probability = Math.round(50 + ratio * 30);
-} else if (totalScore >= data.totalAvg) {
-// 受験者平均 〜 合格最低点: 30% 〜 50%
-const ratio = (totalScore - data.totalAvg) / (data.passMin - data.totalAvg);
-probability = Math.round(30 + ratio * 20);
-} else {
-// 受験者平均未満: 10% 〜 30%
-const ratio = totalScore / data.totalAvg;
-probability = Math.max(10, Math.round(ratio * 30));
-}
-// ランク割り振りと見栄え
-if (probability >= 80) {
-rank = "A";
-rankTitle = "合格安全圏 (確実性が高い)";
-badgeClass = "bg-emerald-500 text-white shadow-emerald-200";
-} else if (probability >= 70) {
-rank = "B";
-rankTitle = "合格圏 (有望)";
-badgeClass = "bg-teal-500 text-white shadow-teal-200";
-} else if (probability >= 50) {
-rank = "C";
-rankTitle = "ボーダーライン (勝負所)";
-badgeClass = "bg-amber-500 text-white shadow-amber-200";
-} else if (probability >= 30) {
-rank = "D";
-rankTitle = "挑戦圏 (あと一歩)";
-badgeClass = "bg-orange-500 text-white shadow-orange-200";
-} else {
-rank = "E";
-rankTitle = "再強化圏 (基礎固めが必要)";
-badgeClass = "bg-rose-500 text-white shadow-rose-200";
-}
-}
-// UI反映：可能性 & ランク
-document.getElementById("probabilityText").innerText = hasInput ? ⁠${probability}%⁠ : "0%";
-document.getElementById("rankBadge").innerText = rank;
-document.getElementById("rankBadge").className = ⁠text-3xl font-black px-5 py-2 rounded-2xl shadow-md transition-all duration-300 ${badgeClass}⁠;
-document.getElementById("rankTitle").innerText = rankTitle;
-// 4科合計
-document.getElementById("displayTotalScore").innerText = totalScore;
-// 最低点との差
-const diffMin = totalScore - data.passMin;
-const diffMinElem = document.getElementById("displayDiffScore");
-if (!hasInput) {
-diffMinElem.innerText = "--";
-diffMinElem.className = "text-2xl font-black text-slate-800";
-} else if (diffMin >= 0) {
-diffMinElem.innerText = ⁠+${diffMin.toFixed(1)}⁠;
-diffMinElem.className = "text-2xl font-black text-emerald-600";
-} else {
-diffMinElem.innerText = ⁠${diffMin.toFixed(1)}⁠;
-diffMinElem.className = "text-2xl font-black text-rose-600";
-}
-document.getElementById("diffSubtitle").innerText = ⁠最低点: ${data.passMin}点⁠;
-// 平均点との差
-const diffAvg = totalScore - data.passAvg;
-const diffAvgElem = document.getElementById("displayAvgDiffScore");
-if (!hasInput) {
-diffAvgElem.innerText = "--";
-diffAvgElem.className = "text-2xl font-black text-slate-800";
-} else if (diffAvg >= 0) {
-diffAvgElem.innerText = ⁠+${diffAvg.toFixed(1)}⁠;
-diffAvgElem.className = "text-2xl font-black text-emerald-600";
-} else {
-diffAvgElem.innerText = ⁠${diffAvg.toFixed(1)}⁠;
-diffAvgElem.className = "text-2xl font-black text-slate-600";
-}
-document.getElementById("avgDiffSubtitle").innerText = ⁠合格平均: ${data.passAvg}点⁠;
-// 科目別バー描画
-renderSubjectBars(scores, data);
-}
-// 科目別バーの動的生成
-function renderSubjectBars(scores, data) {
-const container = document.getElementById("subjectBarContainer");
-container.innerHTML = "";
-Object.keys(data.subjects).forEach(key => {
-const sub = data.subjects[key];
-const userScore = scores[key];
-const userPercent = (userScore / sub.max) * 100;
-const avgPercent = (sub.avg / sub.max) * 100;
-const passAvgPercent = (sub.passAvg / sub.max) * 100;
-const html = `
-<div class="space-y-1 text-xs">
-<div class="flex justify-between font-bold text-slate-700">
-<span>￼{sub.max}点)</span></span>
-<span>
-<strong class="text-blue-600 font-black text-sm">${userScore}</strong>点
-<span class="text-slate-400 font-normal">/ 受験者平均 ${sub.avg}点 / 合格平均 ${sub.passAvg}点</span>
-</span>
-</div>
-<div class="relative w-full h-4 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-<!-- 受験者平均マーカー (灰) -->
-<div class="absolute top-0 bottom-0 bg-slate-300 opacity-60" style="width: ${avgPercent}%;"></div>
-<!-- 合格者平均ライン (縦線) -->
-<div class="absolute top-0 bottom-0 w-0.5 bg-amber-500 z-10" style="left: ${passAvgPercent}%;"></div>
-<!-- キミの得点バー (青) -->
-<div class="absolute top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-300 opacity-90" style="width: ${userPercent}%;"></div>
-</div>
-</div>
-`;
-container.innerHTML += html;
-});
-}
-</script>
+
+  <!-- Header -->
+  <header class="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="bg-amber-500 text-slate-900 font-black px-2.5 py-1 rounded-lg text-xs tracking-wider">
+          PAST PAPER ANALYZER
+        </div>
+        <div>
+          <h1 class="font-bold text-base sm:text-lg leading-tight">開成過去問 合格判定＆偏差値分析</h1>
+          <p class="text-xs text-slate-400">2025年度 (令和7年) 過去問演習マイページ</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-300">
+        <i class="fa-solid fa-user-graduate text-lg text-amber-400"></i>
+        <span class="hidden sm:inline font-medium">生徒マイページ</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-6xl mx-auto px-4 pt-6 space-y-6">
+
+    <!-- Benchmark Target Banner -->
+    <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-2xl shrink-0">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">2025年度 (令和7)</span>
+            <span class="text-xs text-slate-400 font-bold">開成中学校 入試結果データ基準</span>
+          </div>
+          <h2 class="font-black text-xl text-slate-800">開成過去問 判定＆推定偏差値</h2>
+        </div>
+      </div>
+
+      <!-- Quick Benchmark Stats -->
+      <div class="grid grid-cols-3 sm:flex items-center gap-3 sm:gap-6 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200/60 text-center">
+        <div>
+          <span class="text-slate-400 block font-bold">4科満点</span>
+          <span class="font-black text-slate-700 text-sm">310点</span>
+        </div>
+        <div class="hidden sm:block h-6 w-px bg-slate-200"></div>
+        <div>
+          <span class="text-slate-400 block font-bold">受験者平均</span>
+          <span class="font-black text-slate-700 text-sm">192.2点</span>
+        </div>
+        <div class="hidden sm:block h-6 w-px bg-slate-200"></div>
+        <div>
+          <span class="text-slate-400 block font-bold">合格者平均</span>
+          <span class="font-black text-slate-700 text-sm">219.5点</span>
+        </div>
+        <div class="hidden sm:block h-6 w-px bg-slate-200"></div>
+        <div>
+          <span class="text-slate-400 block font-bold">合格最低点</span>
+          <span class="font-black text-rose-600 text-sm">202.0点</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- Left Column: Input Form -->
+      <div class="lg:col-span-5 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-center border-b pb-3 mb-4">
+            <h3 class="font-black text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-pen-to-square text-blue-600"></i>
+              得点入力 (2025年度)
+            </h3>
+            <span class="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> リアルタイム計算
+            </span>
+          </div>
+
+          <form id="scoreForm" oninput="calculateAll()" class="space-y-4">
+            <!-- 国語 -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="input_japanese" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> 国語
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <input type="number" id="input_japanese" min="0" max="85" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                  <span class="text-xs font-bold text-slate-500">/ 85点</span>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                <span>受験者平均: <b>40.4</b>点</span>
+                <span>合格者平均: <b>50.1</b>点</span>
+              </div>
+            </div>
+
+            <!-- 算数 -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="input_math" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 算数
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <input type="number" id="input_math" min="0" max="85" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                  <span class="text-xs font-bold text-slate-500">/ 85点</span>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                <span>受験者平均: <b>46.9</b>点</span>
+                <span>合格者平均: <b>55.2</b>点</span>
+              </div>
+            </div>
+
+            <!-- 社会 -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="input_society" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 社会
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <input type="number" id="input_society" min="0" max="70" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                  <span class="text-xs font-bold text-slate-500">/ 70点</span>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                <span>受験者平均: <b>52.9</b>点</span>
+                <span>合格者平均: <b>57.0</b>点</span>
+              </div>
+            </div>
+
+            <!-- 理科 -->
+            <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+              <div class="flex justify-between items-center">
+                <label for="input_science" class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 理科
+                </label>
+                <div class="flex items-center gap-1.5">
+                  <input type="number" id="input_science" min="0" max="70" placeholder="0" class="w-20 text-right text-xl font-black bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-2 focus:ring-blue-500 outline-none shadow-sm">
+                  <span class="text-xs font-bold text-slate-500">/ 70点</span>
+                </div>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between bg-white px-2 py-1 rounded border border-slate-100">
+                <span>受験者平均: <b>52.0</b>点</span>
+                <span>合格者平均: <b>57.2</b>点</span>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <button onclick="resetScores()" class="mt-4 w-full text-xs font-bold text-slate-400 hover:text-slate-600 transition flex items-center justify-center gap-1 py-2 border border-dashed border-slate-300 rounded-lg hover:bg-slate-50">
+          <i class="fa-solid fa-rotate-left"></i> 入力内容をクリア
+        </button>
+      </div>
+
+      <!-- Right Column: Results & Analysis -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- Probability Hero Card -->
+        <div id="resultCard" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 relative overflow-hidden transition-all duration-300">
+          
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b pb-6">
+            <div>
+              <span class="text-xs font-bold text-slate-400 block mb-1">2025年度 過去問演習 総合結果</span>
+              <div class="flex items-baseline gap-2">
+                <h3 class="text-5xl font-black text-slate-800 tracking-tight" id="probabilityText">0%</h3>
+                <span class="text-xs text-slate-500 font-bold">（推定合格可能性）</span>
+              </div>
+            </div>
+
+            <!-- Rank Badge -->
+            <div class="flex items-center gap-3">
+              <div id="rankBadge" class="bg-slate-200 text-slate-600 text-3xl font-black px-5 py-2.5 rounded-2xl shadow-inner tracking-wider">
+                --
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-400 block">総合判定</span>
+                <span id="rankTitle" class="text-sm font-bold text-slate-700">点数を入力してください</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Total Score & Estimated Deviation Summary Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-6 text-center">
+            
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <span class="text-[11px] text-slate-400 font-bold block">4科合計点</span>
+              <span class="text-2xl font-black text-slate-800" id="displayTotalScore">0</span>
+              <span class="text-[10px] text-slate-400 block">/ 310点満点</span>
+            </div>
+
+            <div class="bg-blue-50/70 p-3 rounded-xl border border-blue-100/80">
+              <span class="text-[11px] text-blue-600 font-bold block">4科 推定偏差値</span>
+              <span class="text-2xl font-black text-blue-700" id="displayTotalDev">--</span>
+              <span class="text-[10px] text-blue-400 block">大手模試基準換算</span>
+            </div>
+
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-2 sm:col-span-1">
+              <span class="text-[11px] text-slate-400 font-bold block">合格最低点との差</span>
+              <span class="text-2xl font-black text-slate-800" id="displayDiffScore">--</span>
+              <span class="text-[10px] text-slate-400 block" id="diffSubtitle">合格ボーダー: 202.0点</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Subject Performance Breakdown Table & Bars -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+          <div class="flex justify-between items-center border-b pb-3">
+            <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-blue-600"></i>
+              科目別 分析データ（平均点・推定偏差値）
+            </h3>
+            <span class="text-xs text-slate-400 font-normal">■ キミの得点 / 受験者平均 / 合格平均</span>
+          </div>
+
+          <!-- Table View for Subject Metrics -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <th class="p-2.5">科目</th>
+                  <th class="p-2.5 text-right">キミの得点</th>
+                  <th class="p-2.5 text-right">受験者平均</th>
+                  <th class="p-2.5 text-right">合格者平均</th>
+                  <th class="p-2.5 text-right font-black text-blue-700">推定偏差値</th>
+                </tr>
+              </thead>
+              <tbody id="subjectTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                <!-- Injected via JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Visual Bar Representation -->
+          <div class="space-y-4 pt-2 border-t" id="subjectBarContainer">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- JavaScript Calculation Engine -->
+  <script>
+    // 2025年度 開成中学校 公式データマスタ
+    const data2025 = {
+      fullScore: 310,
+      passMin: 202.0,
+      passAvg: 219.5,
+      totalAvg: 192.2,
+      subjects: {
+        japanese: { name: "国語", max: 85, avg: 40.4, passAvg: 50.1 },
+        math:     { name: "算数", max: 85, avg: 46.9, passAvg: 55.2 },
+        society:  { name: "社会", max: 70, avg: 52.9, passAvg: 57.0 },
+        science:  { name: "理科", max: 70, avg: 52.0, passAvg: 57.2 }
+      }
+    };
+
+    window.onload = () => {
+      calculateAll();
+    };
+
+    function resetScores() {
+      document.getElementById("input_japanese").value = "";
+      document.getElementById("input_math").value = "";
+      document.getElementById("input_society").value = "";
+      document.getElementById("input_science").value = "";
+      calculateAll();
+    }
+
+    // 各科目の推定偏差値（大手模試・四谷/日能研/サピックス等の中学受験模試基準に換算）
+    // 受験者平均点 ≒ 偏差値65.0 (開成受験層の平均)
+    // 合格者平均点 ≒ 偏差値72.0 基準で算出
+    function calcSubjectDev(score, subData) {
+      if (score === 0 || isNaN(score)) return 0;
+      
+      const avg = subData.avg;
+      const passAvg = subData.passAvg;
+      const diffPass = passAvg - avg; // 合格者平均と受験者平均の差
+
+      // 受験者平均＝偏差値65、合格者平均＝偏差値72 (差7ポイント)
+      // 1点あたりの偏差値変動量 = 7.0 / diffPass
+      const devPerPoint = diffPass > 0 ? (7.0 / diffPass) : 0.5;
+      
+      let dev = 65.0 + (score - avg) * devPerPoint;
+      
+      // 上限・下限の調整 (30.0 ~ 85.0)
+      dev = Math.min(85.0, Math.max(30.0, dev));
+      return Math.round(dev * 10) / 10;
+    }
+
+    // 4科合計の推定偏差値
+    function calcTotalDev(totalScore) {
+      if (totalScore === 0 || isNaN(totalScore)) return 0;
+
+      const avg = data2025.totalAvg;   // 192.2
+      const min = data2025.passMin;    // 202.0
+      const passAvg = data2025.passAvg;// 219.5
+
+      let dev = 65.0; // 受験者平均(192.2)で偏差値65.0
+
+      if (totalScore >= avg) {
+        // 合格者平均(219.5)で偏差値72.0、合格最低点(202.0)で偏差値68.0
+        const devPerPoint = (72.0 - 65.0) / (passAvg - avg); // 7.0 / 27.3 ≈ 0.256
+        dev = 65.0 + (totalScore - avg) * devPerPoint;
+      } else {
+        // 平均未満
+        const devPerPoint = 0.25;
+        dev = 65.0 + (totalScore - avg) * devPerPoint;
+      }
+
+      dev = Math.min(85.0, Math.max(30.0, dev));
+      return Math.round(dev * 10) / 10;
+    }
+
+    // 合格可能性(%) 計算ロジック
+    function calcProbability(totalScore, hasInput) {
+      if (!hasInput || totalScore === 0) return { prob: 0, rank: "--", title: "点数を入力してください", badgeClass: "bg-slate-200 text-slate-600" };
+
+      const min = data2025.passMin;   // 202.0
+      const passAvg = data2025.passAvg; // 219.5
+      const avg = data2025.totalAvg;  // 192.2
+
+      let prob = 0;
+
+      if (totalScore >= passAvg) {
+        // 合格者平均(219.5点)以上: 80% 〜 95%
+        const extra = ((totalScore - passAvg) / (data2025.fullScore - passAvg)) * 15;
+        prob = Math.min(95, Math.round(80 + extra));
+      } else if (totalScore >= min) {
+        // 合格最低点(202点) 〜 合格者平均(219.5点): 50% 〜 80%
+        const ratio = (totalScore - min) / (passAvg - min);
+        prob = Math.round(50 + ratio * 30);
+      } else if (totalScore >= avg) {
+        // 受験者平均(192.2点) 〜 合格最低点(202点): 30% 〜 50%
+        const ratio = (totalScore - avg) / (min - avg);
+        prob = Math.round(30 + ratio * 20);
+      } else {
+        // 受験者平均未満: 10% 〜 30%
+        const ratio = Math.max(0, totalScore / avg);
+        prob = Math.max(10, Math.round(ratio * 30));
+      }
+
+      // 10%刻みに丸め込み
+      prob = Math.round(prob / 5) * 5;
+
+      let rank = "E";
+      let title = "再強化圏 (基礎力底上げが必要)";
+      let badgeClass = "bg-rose-500 text-white shadow-rose-200";
+
+      if (prob >= 80) {
+        rank = "A";
+        title = "合格安全圏 (アドバンテージあり)";
+        badgeClass = "bg-emerald-500 text-white shadow-emerald-200";
+      } else if (prob >= 70) {
+        rank = "B";
+        title = "合格圏 (有望・好調)";
+        badgeClass = "bg-teal-500 text-white shadow-teal-200";
+      } else if (prob >= 50) {
+        rank = "C";
+        title = "ボーダーライン (最低点クリア)";
+        badgeClass = "bg-amber-500 text-white shadow-amber-200";
+      } else if (prob >= 30) {
+        rank = "D";
+        title = "挑戦圏 (あと数点でボーダー)";
+        badgeClass = "bg-orange-500 text-white shadow-orange-200";
+      }
+
+      return { prob, rank, title, badgeClass };
+    }
+
+    // 全体計算・UI更新
+    function calculateAll() {
+      const scores = {
+        japanese: parseFloat(document.getElementById("input_japanese").value) || 0,
+        math:     parseFloat(document.getElementById("input_math").value) || 0,
+        society:  parseFloat(document.getElementById("input_society").value) || 0,
+        science:  parseFloat(document.getElementById("input_science").value) || 0
+      };
+
+      const inputs = ["japanese", "math", "society", "science"].map(s => document.getElementById(`input_${s}`).value);
+      const hasInput = inputs.some(val => val !== "");
+
+      // 4科合計
+      const totalScore = scores.japanese + scores.math + scores.society + scores.science;
+
+      // 推定偏差値計算
+      const totalDev = hasInput ? calcTotalDev(totalScore) : "--";
+      const subjectDevs = {
+        japanese: scores.japanese > 0 || inputs[0] !== "" ? calcSubjectDev(scores.japanese, data2025.subjects.japanese) : "--",
+        math:     scores.math > 0 || inputs[1] !== "" ? calcSubjectDev(scores.math, data2025.subjects.math) : "--",
+        society:  scores.society > 0 || inputs[2] !== "" ? calcSubjectDev(scores.society, data2025.subjects.society) : "--",
+        science:  scores.science > 0 || inputs[3] !== "" ? calcSubjectDev(scores.science, data2025.subjects.science) : "--"
+      };
+
+      // 合格判定
+      const evalRes = calcProbability(totalScore, hasInput);
+
+      // --- UI更新 ---
+      document.getElementById("probabilityText").innerText = hasInput ? `${evalRes.prob}%` : "0%";
+      document.getElementById("rankBadge").innerText = evalRes.rank;
+      document.getElementById("rankBadge").className = `text-3xl font-black px-5 py-2.5 rounded-2xl shadow-md transition-all duration-300 ${evalRes.badgeClass}`;
+      document.getElementById("rankTitle").innerText = evalRes.title;
+
+      // 4科合計 & 推定偏差値
+      document.getElementById("displayTotalScore").innerText = hasInput ? totalScore : 0;
+      document.getElementById("displayTotalDev").innerText = hasInput ? totalDev : "--";
+
+      // 最低点との差
+      const diffMin = totalScore - data2025.passMin;
+      const diffElem = document.getElementById("displayDiffScore");
+      if (!hasInput) {
+        diffElem.innerText = "--";
+        diffElem.className = "text-2xl font-black text-slate-800";
+      } else if (diffMin >= 0) {
+        diffElem.innerText = `+${diffMin.toFixed(1)}`;
+        diffElem.className = "text-2xl font-black text-emerald-600";
+      } else {
+        diffElem.innerText = `${diffMin.toFixed(1)}`;
+        diffElem.className = "text-2xl font-black text-rose-600";
+      }
+
+      // テーブルとバーのレンダリング
+      renderSubjectTable(scores, subjectDevs, inputs);
+      renderSubjectBars(scores, data2025);
+    }
+
+    // 科目別データテーブル描画
+    function renderSubjectTable(scores, devs, inputs) {
+      const tbody = document.getElementById("subjectTableBody");
+      tbody.innerHTML = "";
+
+      Object.keys(data2025.subjects).forEach((key, index) => {
+        const sub = data2025.subjects[key];
+        const userScore = inputs[index] !== "" ? scores[key] : "--";
+        const devVal = devs[key];
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50 transition";
+        tr.innerHTML = `
+          <td class="p-2.5 font-bold text-slate-800">${sub.name} <span class="text-[10px] text-slate-400 font-normal">(満点${sub.max})</span></td>
+          <td class="p-2.5 text-right font-black text-slate-900">${userScore}${inputs[index] !== "" ? '点' : ''}</td>
+          <td class="p-2.5 text-right text-slate-500">${sub.avg}点</td>
+          <td class="p-2.5 text-right text-slate-500">${sub.passAvg}点</td>
+          <td class="p-2.5 text-right font-black text-blue-600 text-sm">${devVal !== "--" ? devVal : '--'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 科目別比較バー描画
+    function renderSubjectBars(scores, data) {
+      const container = document.getElementById("subjectBarContainer");
+      container.innerHTML = "";
+
+      Object.keys(data.subjects).forEach(key => {
+        const sub = data.subjects[key];
+        const userScore = scores[key];
+
+        const userPercent = Math.min(100, (userScore / sub.max) * 100);
+        const avgPercent = (sub.avg / sub.max) * 100;
+        const passAvgPercent = (sub.passAvg / sub.max) * 100;
+
+        const html = `
+          <div class="space-y-1.5 text-xs">
+            <div class="flex justify-between font-bold text-slate-700">
+              <span class="flex items-center gap-1.5">${sub.name} <span class="text-slate-400 font-normal">(満点${sub.max}点)</span></span>
+              <span>
+                キミ: <strong class="text-blue-600 font-black text-sm">${userScore}</strong>点 
+                <span class="text-slate-400 font-normal"> / 受験者平均${sub.avg}点 / 合格平均${sub.passAvg}点</span>
+              </span>
+            </div>
+            
+            <div class="relative w-full h-3.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+              <!-- 受験者平均ゾーン (灰) -->
+              <div class="absolute top-0 bottom-0 bg-slate-250 opacity-50" style="width: ${avgPercent}%;"></div>
+              
+              <!-- 合格者平均ライン (縦線マーカー) -->
+              <div class="absolute top-0 bottom-0 w-1 bg-amber-500 z-20 shadow-sm" style="left: calc(${passAvgPercent}% - 2px);" title="合格者平均: ${sub.passAvg}点"></div>
+
+              <!-- キミの得点バー (青) -->
+              <div class="absolute top-0 bottom-0 bg-blue-600 rounded-full transition-all duration-300 opacity-90 z-10" style="width: ${userPercent}%;"></div>
+            </div>
+          </div>
+        `;
+        container.innerHTML += html;
+      });
+    }
+  </script>
 </body>
 </html>
