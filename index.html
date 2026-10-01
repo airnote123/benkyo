@@ -1,1287 +1,264 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusTrack - ポモドーロ勉強時間管理アプリ</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Canvas Confetti -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <!-- Supabase JS Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
-        }
-        .font-mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        @keyframes pulse-glow {
-            0%, 100% {
-                box-shadow: 0 0 15px rgba(245, 158, 11, 0.6), 0 0 30px rgba(245, 158, 11, 0.3);
-                border-color: #f59e0b;
-                transform: scale(1.03);
-            }
-            50% {
-                box-shadow: 0 0 25px rgba(245, 158, 11, 0.9), 0 0 50px rgba(245, 158, 11, 0.5);
-                border-color: #fbbf24;
-                transform: scale(1.08);
-            }
-        }
-        .confirm-glow {
-            animation: pulse-glow 1.2s infinite ease-in-out;
-            background: linear-gradient(135deg, #b45309, #d97706) !important;
-            color: #ffffff !important;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>過去問自動結合・登録パイプライン</title>
+  <!-- Tailwind CSS (UI用) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- jsQR (QRコード解析) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <!-- pdf.js (PDF解体用) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
-<body class="min-h-screen flex flex-col bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white">
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+  <div class="max-w-2xl mx-auto space-y-6">
+    <header class="border-b border-slate-700 pb-4">
+      <h1 class="text-xl font-bold text-emerald-400">過去問スキャン・半自動インポート</h1>
+      <p class="text-xs text-slate-400 mt-1">Epsonスキャンデータ（PDF/画像2枚）を自動結合してSupabaseへ登録します</p>
+    </header>
 
-<!-- ヘッダーエリア -->
-<header class="bg-slate-800/90 border-b border-slate-700/80 sticky top-0 z-30 backdrop-blur-md">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                <i class="fa-solid fa-graduation-cap text-xl text-white"></i>
-            </div>
-            <div>
-                <h1 class="text-base sm:text-lg font-extrabold bg-gradient-to-r from-indigo-400 to-purple-300 bg-clip-text text-transparent">
-                    FocusTrack
-                </h1>
-                <p class="text-[10px] text-slate-400 hidden sm:block">ポモドーロ & ゲーミフィケーション勉強管理</p>
-            </div>
+    <!-- ファイル選択エリア -->
+    <main class="space-y-4">
+      <div id="drop-zone" class="border-2 border-dashed border-slate-600 hover:border-emerald-500 rounded-xl p-8 text-center bg-slate-800/50 cursor-pointer transition-colors">
+        <input type="file" id="file-input" accept="image/*,.pdf" multiple class="hidden">
+        <div class="space-y-2">
+          <svg class="w-10 h-10 mx-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <p class="text-sm font-medium">ファイルを選択（スキャンPDFまたは画像2枚）</p>
+          <p class="text-xs text-slate-500">タップして「ファイル」アプリから選択</p>
         </div>
+      </div>
 
-        <div class="flex items-center gap-2 sm:gap-4 bg-slate-950/60 px-3 py-1.5 rounded-xl border border-slate-800">
-            <!-- レベル & 称号 -->
-            <div class="flex items-center gap-2 border-r border-slate-800 pr-3 cursor-pointer hover:opacity-80 transition-opacity" onclick="openRankModal()" title="ランク一覧を見る">
-                <div class="w-10 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-yellow-300 text-slate-950 font-black text-xs flex items-center justify-center shadow-lg shadow-amber-500/20" id="userLevelBadge">
-                    Rank A
-                </div>
-                <div>
-                    <div class="text-[11px] font-bold text-amber-400 whitespace-nowrap" id="userRankTitle">見習い</div>
-                    <div class="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-0.5 border border-slate-700">
-                        <div id="xpProgressBar" class="h-full bg-gradient-to-r from-amber-400 to-yellow-300 w-0 transition-all duration-500"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ストリーク（連続日数） -->
-            <div class="text-center px-1">
-                <span class="text-[9px] text-slate-400 block flex items-center gap-0.5 justify-center">
-                    <i class="fa-solid fa-fire text-orange-500"></i> ストリーク
-                </span>
-                <span id="headerStreak" class="font-black text-orange-400 text-xs sm:text-sm font-mono">0日</span>
-            </div>
-
-            <div class="h-6 w-px bg-slate-800 hidden sm:block"></div>
-
-            <div class="text-right hidden sm:block">
-                <span class="text-[10px] text-slate-400 block">本日のポモ数</span>
-                <span id="headerTodayPomo" class="font-bold text-amber-400 text-xs sm:text-sm font-mono">0 🍅</span>
-            </div>
-            
-            <!-- iPadリアルタイム時計表示 -->
-            <div class="text-right pl-2 border-l border-slate-800">
-                <span class="text-[9px] text-slate-400 block">現在時刻</span>
-                <span id="headerClock" class="font-bold text-indigo-300 text-xs sm:text-sm font-mono">00:00:00</span>
-            </div>
+      <!-- ステータス表示表示ログ -->
+      <div id="status-card" class="hidden bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
+        <div class="flex items-center justify-between">
+          <span id="status-title" class="text-sm font-bold text-slate-200">処理中...</span>
+          <span id="status-spinner" class="animate-spin text-emerald-400">🌀</span>
         </div>
-    </div>
-</header>
-
-<main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-    <!-- 左側: タイマー & アイテムインベントリ & タスク -->
-    <section class="lg:col-span-5 space-y-6">
-
-        <!-- アイテムインベントリ -->
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur">
-            <div class="flex items-center justify-between mb-3 border-b border-slate-700/50 pb-2">
-                <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-box-archive text-amber-400"></i> 所持アイテム（インベントリ）
-                </h2>
-                <span class="text-[10px] text-slate-400">集中達成でGET!</span>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div class="bg-slate-900/80 border border-amber-500/30 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden group">
-                    <div class="flex items-center justify-between">
-                        <span class="text-2xl">☕️</span>
-                        <span id="badgeCoffeeCount" class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            x 0
-                        </span>
-                    </div>
-                    <div class="mt-2">
-                        <div class="text-xs font-bold text-slate-200">30分長休憩</div>
-                        <div class="text-[10px] text-slate-400 mt-0.5">4回達成で獲得 / 使用でセッションリセット</div>
-                    </div>
-                    <button id="btnUseCoffee" onclick="useCoffeeTicket()" disabled class="mt-2.5 w-full py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs shadow transition-all disabled:opacity-30 disabled:pointer-events-none">
-                        使う
-                    </button>
-                </div>
-
-                <div class="bg-slate-900/80 border border-emerald-500/30 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden group">
-                    <div class="flex items-center justify-between">
-                        <span class="text-2xl">🧘🏼</span>
-                        <span id="badgeYogaCount" class="text-xs font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            x 0
-                        </span>
-                    </div>
-                    <div class="mt-2">
-                        <div class="text-xs font-bold text-slate-200">10分休憩延長</div>
-                        <div class="text-[10px] text-slate-400 mt-0.5">確率20%で獲得 / 休憩中+10分 (最大2回)</div>
-                    </div>
-                    <button id="btnUseYoga" onclick="useYogaTicket()" disabled class="mt-2.5 w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs shadow transition-all disabled:opacity-30 disabled:pointer-events-none">
-                        休憩を延長
-                    </button>
-                </div>
-            </div>
+        <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+          <div id="progress-bar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
         </div>
+        <p id="status-log" class="text-xs font-mono text-slate-400 whitespace-pre-line"></p>
+      </div>
 
-        <!-- ポモドーロタイマーカード -->
-        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 shadow-2xl backdrop-blur relative overflow-hidden">
-            <div class="flex items-center justify-between mb-4">
-                <span id="timerModeBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 flex items-center gap-1.5">
-                    <i class="fa-solid fa-brain text-indigo-400"></i> <span id="timerModeText">25分 集中タイム</span>
-                </span>
-                <span id="sessionCycleBadge" class="text-xs text-slate-400 font-medium">
-                    第 <span id="currentSessionNum" class="text-amber-400 font-bold text-sm">1</span> / 4 セッション
-                </span>
-            </div>
+      <!--プレビューキャンバス (非表示・内部計算用) -->
+      <canvas id="work-canvas" class="hidden"></canvas>
+    </main>
+  </div>
 
-            <div class="text-center my-4 py-2">
-                <div id="timerDisplay" class="text-6xl sm:text-7xl font-extrabold font-mono tracking-tight text-slate-100 drop-shadow-md">
-                    25:00
-                </div>
-                <div class="text-xs text-slate-400 mt-2 flex items-center justify-center gap-2">
-                    <span id="timerSubjectTag" class="px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-indigo-300 font-medium">
-                        算数
-                    </span>
-                    <span id="timerSubText">集中して学習に取り組みましょう</span>
-                </div>
-            </div>
+  <script>
+    // --- 1. Supabase 設定 ---
+    const SUPABASE_URL = 'YOUR_SUPABASE_URL'; // ご自身の環境に合わせて打ち替えてください
+    const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-            <div class="mt-6 pt-4 border-t border-slate-700/60">
-                <p class="text-[11px] text-center text-slate-400 mb-3">
-                    左右の操作選択後、中央の「確定」ボタンを押してください
-                </p>
-                <div class="grid grid-cols-3 gap-3 items-center max-w-xs mx-auto">
-                    <div class="flex flex-col gap-2">
-                        <button id="btnStartLeft" onclick="selectAction('start')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-emerald-500/50 text-emerald-400 font-bold hover:bg-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-play text-xs"></i>
-                            <span class="text-xs">開始</span>
-                        </button>
-                        <button id="btnPauseLeft" onclick="selectAction('pause')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-rose-500/50 text-rose-400 font-bold hover:bg-rose-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-pause text-xs"></i>
-                            <span class="text-xs">停止</span>
-                        </button>
-                    </div>
+    // PDF.js worker 設定
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-                    <div class="flex flex-col items-center justify-center">
-                        <button id="btnConfirmCenter" onclick="confirmAction()" class="w-20 h-20 rounded-2xl bg-slate-950 border-2 border-slate-600 text-slate-300 font-bold flex flex-col items-center justify-center transition-all duration-300 shadow-xl active:scale-90">
-                            <i id="confirmIcon" class="fa-solid fa-gear text-xl mb-1"></i>
-                            <span id="confirmText" class="text-[10px]">設定</span>
-                        </button>
-                    </div>
+    const fileInput = document.getElementById('file-input');
+    const dropZone = document.getElementById('drop-zone');
+    const statusCard = document.getElementById('status-card');
+    const statusTitle = document.getElementById('status-title');
+    const statusLog = document.getElementById('status-log');
+    const progressBar = document.getElementById('progress-bar');
+    const statusSpinner = document.getElementById('status-spinner');
 
-                    <div class="flex flex-col gap-2">
-                        <button id="btnStartRight" onclick="selectAction('start')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-emerald-500/50 text-emerald-400 font-bold hover:bg-emerald-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-play text-xs"></i>
-                            <span class="text-xs">開始</span>
-                        </button>
-                        <button id="btnPauseRight" onclick="selectAction('pause')" class="py-2.5 px-2 rounded-xl bg-slate-900 border border-rose-500/50 text-rose-400 font-bold hover:bg-rose-500/10 active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                            <i class="fa-solid fa-pause text-xs"></i>
-                            <span class="text-xs">停止</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFiles(Array.from(e.target.files)));
 
-            <div class="mt-4 pt-3 border-t border-slate-700/50 flex items-center gap-2">
-                <label class="text-xs font-medium text-slate-400 whitespace-nowrap">学習科目:</label>
-                <select id="timerSubjectSelect" onchange="updateTimerSubject()" class="flex-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs sm:text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-indigo-500">
-                    <option value="算数" selected>算数</option>
-                    <option value="国語">国語</option>
-                    <option value="理科">理科</option>
-                    <option value="社会">社会</option>
-                    <option value="プログラミング">プログラミング</option>
-                    <option value="自習">自習</option>
-                    <option value="その他">その他</option>
-                </select>
-            </div>
-        </div>
+    // --- 2. メイン処理パイプライン ---
+    async function handleFiles(files) {
+      if (files.length === 0) return;
 
-        <!-- 学習タスク管理カード -->
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 sm:p-5 shadow-xl backdrop-blur space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
-                <h2 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <i class="fa-solid fa-list-check text-indigo-400"></i> 学習タスク (ToDo)
-                </h2>
-                <span id="taskProgressBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-950 text-indigo-300 border border-indigo-500/30">
-                    0 / 0 完了
-                </span>
-            </div>
+      showStatus('ファイル読み込み中...', 10, '入力を受付しました');
 
-            <div class="space-y-2">
-                <div class="flex gap-2">
-                    <input type="text" id="taskTitleInput" placeholder="例: 算数ドリル P.12~15" class="flex-1 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500">
-                    <input type="number" id="taskMinsInput" placeholder="目標(分)" min="1" max="300" class="w-20 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-2 py-2 text-center focus:outline-none focus:border-indigo-500">
-                </div>
-                <div class="flex gap-2 items-center">
-                    <select id="taskSubjectSelect" class="w-1/3 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-indigo-500">
-                        <option value="算数">算数</option>
-                        <option value="国語">国語</option>
-                        <option value="理科">理科</option>
-                        <option value="社会">社会</option>
-                        <option value="プログラミング">プログラミング</option>
-                        <option value="自習">自習</option>
-                        <option value="その他">その他</option>
-                    </select>
-                    <input type="datetime-local" id="taskDueInput" title="期限日時（分単位で指定）" class="flex-1 bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-xl px-2 py-1.5 focus:outline-none focus:border-indigo-500">
-                    <button onclick="addTask()" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow transition-all flex items-center gap-1 whitespace-nowrap">
-                        <i class="fa-solid fa-plus text-[10px]"></i> 追加
-                    </button>
-                </div>
-            </div>
+      try {
+        let imageElements = [];
 
-            <div class="max-h-52 overflow-y-auto pr-1 space-y-2" id="taskListContainer"></div>
-        </div>
-
-    </section>
-
-    <!-- 右側: 統計・グラフ・ログリスト -->
-    <section class="lg:col-span-7 space-y-6">
-
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div class="bg-gradient-to-br from-slate-800/80 to-indigo-950/40 border border-indigo-500/30 rounded-2xl p-3 text-center relative overflow-hidden group">
-                <span class="text-[10px] text-indigo-300 font-bold block mb-1">⚡️ 本日獲得XP (デイリー)</span>
-                <span id="statTotalXP" class="text-base sm:text-xl font-extrabold text-indigo-400 font-mono">0 XP</span>
-            </div>
-            <div class="bg-gradient-to-br from-slate-800/80 to-amber-950/40 border border-amber-500/30 rounded-2xl p-3 text-center relative overflow-hidden group">
-                <span class="text-[10px] text-amber-300 font-bold block mb-1">🍅 本日ポモ数 (25分)</span>
-                <span id="statTodayPomo" class="text-base sm:text-xl font-extrabold text-amber-400 font-mono">0 🍅</span>
-            </div>
-            <div class="bg-gradient-to-br from-slate-800/80 to-orange-950/40 border border-orange-500/30 rounded-2xl p-3 text-center relative overflow-hidden group">
-                <span class="text-[10px] text-orange-300 font-bold block mb-1">🔥 連続達成日数</span>
-                <span id="statStreakDays" class="text-base sm:text-xl font-extrabold text-orange-400 font-mono">0 日</span>
-            </div>
-            <div class="bg-gradient-to-br from-slate-800/80 to-emerald-950/40 border border-emerald-500/30 rounded-2xl p-3 text-center relative overflow-hidden group cursor-pointer hover:border-emerald-400/60 transition-colors" onclick="openRankModal()">
-                <span class="text-[10px] text-emerald-300 font-bold block mb-1">👑 ランク / 称号</span>
-                <span id="statRankTitle" class="text-xs sm:text-sm font-extrabold text-emerald-300 whitespace-nowrap block mt-1">Rank A 見習い</span>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                        <i class="fa-solid fa-chart-column text-indigo-400"></i> 集中推移グラフ
-                    </h3>
-                    <div class="flex items-center gap-1.5">
-                        <div class="flex text-[10px] bg-slate-950 rounded-lg p-0.5 border border-slate-800">
-                            <button onclick="switchChartUnit('pomo')" id="btnUnitPomo" class="px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-bold">🍅 ポモ</button>
-                            <button onclick="switchChartUnit('mins')" id="btnUnitMins" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">分</button>
-                            <button onclick="switchChartUnit('xp')" id="btnUnitXP" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">⚡️ XP</button>
-                        </div>
-                        <div class="flex text-[10px] bg-slate-950 rounded-lg p-0.5 border border-slate-800">
-                            <button onclick="switchChartPeriod('7days')" id="btnPeriod7" class="px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold">7日</button>
-                            <button onclick="switchChartPeriod('30days')" id="btnPeriod30" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">30日</button>
-                            <button onclick="switchChartPeriod('weeks')" id="btnPeriodWeeks" class="px-2 py-0.5 rounded-md text-slate-400 hover:text-white">週別</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="h-48 relative">
-                    <canvas id="barChart"></canvas>
-                </div>
-            </div>
-
-            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur flex flex-col justify-between">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                        <i class="fa-solid fa-chart-pie text-purple-400"></i> 教科別学習比率
-                    </h3>
-                    <span class="text-[10px] text-slate-400">累計時間ベース</span>
-                </div>
-                <div class="h-48 relative flex items-center justify-center">
-                    <canvas id="doughnutChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
-                <h3 class="text-xs font-bold text-slate-300 flex items-center gap-2">
-                    <i class="fa-solid fa-brain text-amber-400"></i> ⏰ 24時間集中ゴールデンタイム分析
-                </h3>
-                <span id="goldenTimeAdvice" class="text-[10px] font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                    分析中...
-                </span>
-            </div>
-            <div class="h-36 relative">
-                <canvas id="hourlyChart"></canvas>
-            </div>
-        </div>
-
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur space-y-3">
-            <div class="flex items-center justify-between border-b border-slate-700/50 pb-2">
-                <h3 class="text-xs font-bold text-slate-300 flex items-center gap-2">
-                    <i class="fa-solid fa-clock-rotate-left text-amber-400"></i> 学習完了ログ
-                </h3>
-                <button onclick="generateSampleData()" class="text-[10px] text-indigo-400 hover:underline">
-                    + テスト用データ生成
-                </button>
-            </div>
-            <div id="logListContainer" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
-        </div>
-
-    </section>
-
-</main>
-
-<!-- ランクモーダル -->
-<div id="rankModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-5 space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-700 pb-3">
-            <h3 class="text-sm font-extrabold text-slate-100 flex items-center gap-2">
-                <i class="fa-solid fa-trophy text-amber-400"></i> ランク・称号一覧 & XPルール
-            </h3>
-            <button onclick="closeRankModal()" class="text-slate-400 hover:text-white p-1">
-                <i class="fa-solid fa-xmark text-base"></i>
-            </button>
-        </div>
-
-        <div class="bg-slate-900/90 border border-indigo-500/30 rounded-xl p-3 text-xs space-y-2">
-            <div class="font-bold text-indigo-300 flex items-center gap-1.5">
-                <i class="fa-solid fa-calculator text-amber-400"></i> 本日XP & ランクのルール
-            </div>
-            <ul class="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
-                <li><span class="text-amber-300 font-bold">獲得XP:</span> 勉強時間 <span class="font-mono text-emerald-400">1分 = 10 XP</span></li>
-                <li><span class="text-amber-400 font-bold">デイリーリセット:</span> 毎日XPは0からスタート！</li>
-                <li><span class="text-indigo-300 font-bold">最高ランク目標:</span> 1日10時間（600分 = 6,000 XP）達成で最高ランク「α1 臨界」到達！</li>
-            </ul>
-        </div>
-
-        <div class="max-h-72 overflow-y-auto pr-1 space-y-2" id="rankTableContainer"></div>
-        <div class="pt-2 border-t border-slate-700 text-center">
-            <button onclick="closeRankModal()" class="px-5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs transition-colors">
-                閉じる
-            </button>
-        </div>
-    </div>
-</div>
-
-<script>
-function getLocalDateString(d = new Date()) {
-    return d.toLocaleDateString('sv-SE');
-}
-
-const SUPABASE_URL = "https://qfzyrogwyjbzbblnvqzy.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_tXLLvKe_L-27OsGU-GH3Zw_176oxBqw";
-
-let supabaseClient = null;
-try {
-    if (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
-        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    }
-} catch (e) {
-    console.warn("Supabase init bypassed:", e);
-}
-
-// データモデル
-let studyLogs = JSON.parse(localStorage.getItem('focus_study_logs') || '[]');
-let tasks = JSON.parse(localStorage.getItem('focus_tasks') || '[]');
-
-let coffeeTicketCount = parseInt(localStorage.getItem('focus_coffee') || '0', 10);
-let yogaTicketCount = parseInt(localStorage.getItem('focus_yoga') || '0', 10);
-let yogaUsedInCurrentBreak = 0;
-
-// タイマー状態
-let timerInterval = null;
-let timeLeft = 25 * 60;
-let totalTimerSeconds = 25 * 60;
-let isRunning = false;
-let isCompleting = false; // 重複登録防止フラグ
-let timerMode = 'work'; 
-let currentSession = 1;
-let currentTimerSubject = '算数';
-
-let selectedAction = null;
-let targetEndTime = null;
-let sessionStartDate = null;
-
-// チャート管理
-let barChartInstance = null;
-let doughnutChartInstance = null;
-let hourlyChartInstance = null;
-
-let activePeriod = '7days';
-let activeUnit = 'pomo';
-
-// ランク順序
-const RANKS = [
-    { minXP: 0,     rank: 'A',  title: '見習い' },
-    { minXP: 250,   rank: 'B',  title: '集中' },  
-    { minXP: 600,   rank: 'C',  title: '覚醒' },  
-    { minXP: 1200,  rank: 'D',  title: '突破' },  
-    { minXP: 2100,  rank: 'E',  title: '極致' },  
-    { minXP: 3000,  rank: 'F',  title: '無双' },  
-    { minXP: 4200,  rank: 'G',  title: '覇者' },  
-    { minXP: 5100,  rank: 'α2', title: '神域' },  
-    { minXP: 6000,  rank: 'α1', title: '臨界' }   
-];
-
-window.onload = function () {
-    loadSettingsAndItemsFromCloud().then(() => {
-        updateDashboard();
-        initCharts();
-        renderTaskList();
-        updateTimerButtonsState();
-        startRealtimeClock();
-    });
-};
-
-document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-        updateDashboard();
-    }
-});
-
-function startRealtimeClock() {
-    setInterval(() => {
-        const now = new Date();
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mm = String(now.getMinutes()).padStart(2, '0');
-        const ss = String(now.getSeconds()).padStart(2, '0');
-        const clockEl = document.getElementById('headerClock');
-        if (clockEl) {
-            clockEl.textContent = `${hh}:${mm}:${ss}`;
-        }
-    }, 1000);
-}
-
-async function loadSettingsAndItemsFromCloud() {
-    if (supabaseClient) {
-        try {
-            const { data } = await supabaseClient.from('user_settings').select('*').eq('id', 1).single();
-            if (data) {
-                coffeeTicketCount = data.coffee_count ?? coffeeTicketCount;
-                yogaTicketCount = data.yoga_count ?? yogaTicketCount;
-            }
-            const { data: taskData } = await supabaseClient.from('tasks').select('*');
-            if (taskData) tasks = taskData;
-
-            const { data: logData } = await supabaseClient.from('study_logs').select('*');
-            if (logData) studyLogs = logData;
-        } catch (err) {
-            console.warn("Local storage active:", err);
-        }
-    }
-    updateInventoryUI();
-}
-
-async function saveSettingsAndItemsToCloud() {
-    localStorage.setItem('focus_coffee', coffeeTicketCount);
-    localStorage.setItem('focus_yoga', yogaTicketCount);
-    localStorage.setItem('focus_study_logs', JSON.stringify(studyLogs));
-    localStorage.setItem('focus_tasks', JSON.stringify(tasks));
-
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('user_settings').upsert({
-                id: 1,
-                coffee_count: coffeeTicketCount,
-                yoga_count: yogaTicketCount
-            });
-        } catch (err) {
-            console.warn("Cloud sync skipped:", err);
-        }
-    }
-    updateInventoryUI();
-}
-
-function updateTimerSubject() {
-    const select = document.getElementById('timerSubjectSelect');
-    if (select) {
-        currentTimerSubject = select.value;
-        const tag = document.getElementById('timerSubjectTag');
-        if (tag) tag.textContent = currentTimerSubject;
-    }
-}
-
-function selectAction(action) {
-    if (isRunning && action === 'start') return;
-    if (!isRunning && action === 'pause') return;
-
-    selectedAction = action;
-    const btnStartLeft = document.getElementById('btnStartLeft');
-    const btnStartRight = document.getElementById('btnStartRight');
-    const btnPauseLeft = document.getElementById('btnPauseLeft');
-    const btnPauseRight = document.getElementById('btnPauseRight');
-    const centerBtn = document.getElementById('btnConfirmCenter');
-
-    [btnStartLeft, btnStartRight, btnPauseLeft, btnPauseRight].forEach(b => {
-        if (b) b.classList.remove('ring-2', 'ring-amber-400', 'bg-slate-800');
-    });
-
-    if (action === 'start') {
-        if (btnStartLeft) btnStartLeft.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
-        if (btnStartRight) btnStartRight.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
-    } else {
-        if (btnPauseLeft) btnPauseLeft.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
-        if (btnPauseRight) btnPauseRight.classList.add('ring-2', 'ring-amber-400', 'bg-slate-800');
-    }
-
-    centerBtn.classList.add('confirm-glow');
-}
-
-function confirmAction() {
-    if (!selectedAction) return;
-
-    const centerBtn = document.getElementById('btnConfirmCenter');
-    centerBtn.classList.remove('confirm-glow');
-
-    if (selectedAction === 'start') {
-        startTimer();
-    } else {
-        pauseTimer();
-    }
-
-    selectedAction = null;
-    const confirmIcon = document.getElementById('confirmIcon');
-    const confirmText = document.getElementById('confirmText');
-    if (confirmIcon) confirmIcon.className = 'fa-solid fa-gear text-xl mb-1';
-    if (confirmText) confirmText.textContent = '設定';
-}
-
-function updateTimerButtonsState() {
-    const btnStartLeft = document.getElementById('btnStartLeft');
-    const btnStartRight = document.getElementById('btnStartRight');
-    const btnPauseLeft = document.getElementById('btnPauseLeft');
-    const btnPauseRight = document.getElementById('btnPauseRight');
-
-    if (isRunning) {
-        if (btnStartLeft) { btnStartLeft.disabled = true; btnStartLeft.classList.add('opacity-30', 'pointer-events-none'); }
-        if (btnStartRight) { btnStartRight.disabled = true; btnStartRight.classList.add('opacity-30', 'pointer-events-none'); }
-        if (btnPauseLeft) { btnPauseLeft.disabled = false; btnPauseLeft.classList.remove('opacity-30', 'pointer-events-none'); }
-        if (btnPauseRight) { btnPauseRight.disabled = false; btnPauseRight.classList.remove('opacity-30', 'pointer-events-none'); }
-    } else {
-        if (btnStartLeft) { btnStartLeft.disabled = false; btnStartLeft.classList.remove('opacity-30', 'pointer-events-none'); }
-        if (btnStartRight) { btnStartRight.disabled = false; btnStartRight.classList.remove('opacity-30', 'pointer-events-none'); }
-        if (btnPauseLeft) { btnPauseLeft.disabled = true; btnPauseLeft.classList.add('opacity-30', 'pointer-events-none'); }
-        if (btnPauseRight) { btnPauseRight.disabled = true; btnPauseRight.classList.add('opacity-30', 'pointer-events-none'); }
-    }
-}
-
-function startTimer() {
-    if (isRunning) return;
-    isRunning = true;
-    updateTimerButtonsState();
-
-    if (!sessionStartDate) {
-        sessionStartDate = getLocalDateString();
-    }
-    targetEndTime = Date.now() + (timeLeft * 1000);
-
-    timerInterval = setInterval(() => {
-        const now = Date.now();
-        timeLeft = Math.max(0, Math.ceil((targetEndTime - now) / 1000));
-
-        if (timeLeft > 0) {
-            updateTimerDisplay();
+        // PDFか画像かで分岐処理
+        if (files.length === 1 && files[0].type === 'application/pdf') {
+          log('PDFファイルを検知。各ページを画像に解体中...');
+          imageElements = await extractImagesFromPdf(files[0]);
         } else {
-            clearInterval(timerInterval);
-            isRunning = false;
-            updateTimerDisplay();
-            updateTimerButtonsState();
-            
-            // 重複呼び出し防止
-            if (!isCompleting) {
-                isCompleting = true;
-                handleTimerComplete().then(() => {
-                    isCompleting = false;
-                });
-            }
-        }
-    }, 250);
-}
-
-function pauseTimer() {
-    if (!isRunning) return;
-    clearInterval(timerInterval);
-    isRunning = false;
-    if (targetEndTime) {
-        timeLeft = Math.max(0, Math.ceil((targetEndTime - Date.now()) / 1000));
-    }
-    updateTimerButtonsState();
-}
-
-function updateTimerDisplay() {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = timeLeft % 60;
-    const display = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-    const el = document.getElementById('timerDisplay');
-    if (el) el.textContent = display;
-    document.title = `(${display}) FocusTrack`;
-}
-
-async function handleTimerComplete() {
-    if (timerMode === 'work') {
-        const earnedMins = 25;
-        const now = new Date();
-        const dateStr = sessionStartDate || getLocalDateString(now);
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-        const newLog = {
-            id: Date.now(),
-            date: dateStr,
-            time: timeStr,
-            subject: currentTimerSubject,
-            minutes: earnedMins
-        };
-
-        studyLogs.unshift(newLog);
-
-        if (supabaseClient) {
-            try {
-                await supabaseClient.from('study_logs').insert([newLog]);
-            } catch (err) {
-                console.warn("Log sync error:", err);
-            }
+          log('画像ファイルを検知。読み込み中...');
+          imageElements = await Promise.all(files.map(loadImageFile));
         }
 
-        if (window.confetti) {
-            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        if (imageElements.length !== 2) {
+          throw new Error(`画像が2枚必要ですが、${imageElements.length}コマ検出されました。見開き左右（P1/P2）になるように指定してください。`);
         }
 
-        if (currentSession < 4) {
-            timerMode = 'break';
-            timeLeft = 5 * 60;
-            totalTimerSeconds = 5 * 60;
-            document.getElementById('timerModeText').textContent = '5分 休憩タイム';
-            document.getElementById('timerSubText').textContent = '深呼吸してリフレッシュしましょう';
-            
-            if (Math.random() < 0.20) {
-                yogaTicketCount++;
-            }
-        } else {
-            timerMode = 'longBreak';
-            timeLeft = 30 * 60;
-            totalTimerSeconds = 30 * 60;
-            coffeeTicketCount++;
-            document.getElementById('timerModeText').textContent = '30分 長休憩タイム';
-            document.getElementById('timerSubText').textContent = '☕️ 30分長休憩チケットを獲得しました！';
-            currentSession = 1;
+        showStatus('QRコード解析中...', 30, '左右ページおよびメタデータを読み取っています');
+
+        // QR解析と向き補正
+        const parsedPages = await Promise.all(imageElements.map(parseAndOrientImage));
+
+        const p1 = parsedPages.find(p => p.meta.page === 'P1');
+        const p2 = parsedPages.find(p => p.meta.page === 'P2');
+
+        if (!p1 || !p2) {
+          throw new Error('P1（左）とP2（右）のQRコードのペアを認識できませんでした。QRが途切れていないか確認してください。');
         }
 
-        yogaUsedInCurrentBreak = 0;
-        await saveSettingsAndItemsToCloud();
-        updateDashboard();
-
-    } else {
-        if (timerMode === 'longBreak') {
-            currentSession = 1;
-        } else {
-            currentSession++;
-            if (currentSession > 4) currentSession = 4;
-        }
-        timerMode = 'work';
-        timeLeft = 25 * 60;
-        totalTimerSeconds = 25 * 60;
-        document.getElementById('timerModeText').textContent = '25分 集中タイム';
-        document.getElementById('timerSubText').textContent = '集中して学習に取り組みましょう';
-        document.getElementById('currentSessionNum').textContent = currentSession;
-    }
-
-    targetEndTime = null;
-    sessionStartDate = null;
-    updateTimerDisplay();
-
-    // 【追加】次のモードのタイマーを自動的にスタート
-    startTimer();
-}
-
-async function useCoffeeTicket() {
-    if (coffeeTicketCount <= 0) return;
-    if (isRunning) pauseTimer();
-
-    coffeeTicketCount--;
-    currentSession = 1;
-    timerMode = 'work';
-    timeLeft = 25 * 60;
-    totalTimerSeconds = 25 * 60;
-    targetEndTime = null;
-
-    document.getElementById('timerModeText').textContent = '25分 集中タイム';
-    document.getElementById('timerSubText').textContent = '☕️長休憩チケット使用：第1セッションからリセット';
-    document.getElementById('currentSessionNum').textContent = currentSession;
-    updateTimerDisplay();
-    await saveSettingsAndItemsToCloud();
-    updateDashboard();
-}
-
-async function useYogaTicket() {
-    if (yogaTicketCount <= 0 || yogaUsedInCurrentBreak >= 2) return;
-    
-    yogaTicketCount--;
-    yogaUsedInCurrentBreak++;
-    timeLeft += 10 * 60;
-    totalTimerSeconds += 10 * 60;
-
-    if (isRunning && targetEndTime) {
-        targetEndTime += 10 * 60 * 1000;
-    }
-
-    updateTimerDisplay();
-    await saveSettingsAndItemsToCloud();
-}
-
-function updateInventoryUI() {
-    const badgeCoffee = document.getElementById('badgeCoffeeCount');
-    const badgeYoga = document.getElementById('badgeYogaCount');
-    const btnCoffee = document.getElementById('btnUseCoffee');
-    const btnYoga = document.getElementById('btnUseYoga');
-
-    if (badgeCoffee) badgeCoffee.textContent = `x ${coffeeTicketCount}`;
-    if (badgeYoga) badgeYoga.textContent = `x ${yogaTicketCount}`;
-
-    if (btnCoffee) btnCoffee.disabled = coffeeTicketCount <= 0;
-    if (btnYoga) btnYoga.disabled = yogaTicketCount <= 0 || (timerMode === 'work') || (yogaUsedInCurrentBreak >= 2);
-}
-
-async function addTask() {
-    const titleInput = document.getElementById('taskTitleInput');
-    const minsInput = document.getElementById('taskMinsInput');
-    const subjectSelect = document.getElementById('taskSubjectSelect');
-    const dueInput = document.getElementById('taskDueInput');
-
-    const title = titleInput.value.trim();
-    if (!title) return;
-
-    const minutes = parseInt(minsInput.value, 10) || 25;
-    const rawDue = dueInput.value.trim();
-    const dueStr = rawDue ? rawDue : null;
-
-    const localId = Date.now();
-
-    const newTask = {
-        id: localId,
-        title: title,
-        minutes: minutes,
-        subject: subjectSelect.value,
-        due: dueStr,
-        completed: false
-    };
-
-    tasks.push(newTask);
-    titleInput.value = '';
-    minsInput.value = '';
-    dueInput.value = '';
-
-    if (supabaseClient) {
-        try {
-            const { data } = await supabaseClient.from('tasks').insert([{
-                title: title,
-                minutes: minutes,
-                subject: subjectSelect.value,
-                due: dueStr,
-                completed: false
-            }]).select();
-
-            if (data && data[0]) newTask.id = data[0].id;
-        } catch (err) {
-            console.warn("Task error:", err);
-        }
-    }
-
-    saveSettingsAndItemsToCloud();
-    renderTaskList();
-}
-
-async function toggleTask(id) {
-    const task = tasks.find(t => t.id === id);
-    if (!task) return;
-
-    task.completed = !task.completed;
-
-    if (task.completed && window.confetti) {
-        confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
-    }
-
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('tasks').update({ completed: task.completed }).eq('id', id);
-        } catch (err) {
-            console.warn("Task toggle error:", err);
-        }
-    }
-
-    saveSettingsAndItemsToCloud();
-    renderTaskList();
-    updateDashboard();
-}
-
-async function deleteTask(id) {
-    tasks = tasks.filter(t => t.id !== id);
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('tasks').delete().eq('id', id);
-        } catch (err) {
-            console.warn("Task delete error:", err);
-        }
-    }
-    saveSettingsAndItemsToCloud();
-    renderTaskList();
-}
-
-function renderTaskList() {
-    const container = document.getElementById('taskListContainer');
-    const badge = document.getElementById('taskProgressBadge');
-    if (!container) return;
-
-    container.innerHTML = '';
-    const completedCount = tasks.filter(t => t.completed).length;
-    if (badge) badge.textContent = `${completedCount} / ${tasks.length} 完了`;
-
-    if (tasks.length === 0) {
-        container.innerHTML = '<div class="text-center text-xs text-slate-500 py-4">タスクが登録されていません</div>';
-        return;
-    }
-
-    const now = new Date();
-
-    tasks.forEach(t => {
-        let isOverdue = false;
-        let dueDisplay = '';
-        if (t.due) {
-            const dueDate = new Date(t.due);
-            if (!isNaN(dueDate.getTime())) {
-                dueDisplay = `${dueDate.getMonth()+1}/${dueDate.getDate()} ${String(dueDate.getHours()).padStart(2,'0')}:${String(dueDate.getMinutes()).padStart(2,'0')}`;
-                if (!t.completed && dueDate < now) {
-                    isOverdue = true;
-                }
-            }
-        }
-
-        const div = document.createElement('div');
-        div.className = `p-3 rounded-xl border flex items-center justify-between transition-all ${
-            t.completed 
-                ? 'bg-slate-900/40 border-slate-800 opacity-60' 
-                : isOverdue 
-                    ? 'bg-rose-950/30 border-rose-500/50' 
-                    : 'bg-slate-900 border-slate-700/80'
-        }`;
-        div.innerHTML = `
-            <div class="flex items-center gap-3 flex-1 min-w-0">
-                <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTask(${t.id})" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-slate-950 border-slate-700 cursor-pointer">
-                <div class="min-w-0 flex-1">
-                    <div class="text-xs font-bold text-slate-200 truncate ${t.completed ? 'line-through text-slate-400' : ''}">${t.title}</div>
-                    <div class="flex items-center gap-2 mt-0.5 text-[10px]">
-                        <span class="px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-500/30">${t.subject}</span>
-                        <span class="text-slate-400"><i class="fa-regular fa-clock"></i> ${t.minutes}分</span>
-                        ${dueDisplay ? `<span class="${isOverdue ? 'text-rose-400 font-bold' : 'text-slate-400'}"><i class="fa-regular fa-calendar"></i> 期限:${dueDisplay} ${isOverdue ? '(超過)' : ''}</span>` : ''}
-                    </div>
-                </div>
-            </div>
-            <button onclick="deleteTask(${t.id})" class="text-slate-500 hover:text-rose-400 p-1.5 transition-colors">
-                <i class="fa-solid fa-trash-can text-xs"></i>
-            </button>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function calculateStreak() {
-    if (studyLogs.length === 0) return 0;
-    const uniqueDates = Array.from(new Set(studyLogs.map(l => l.date))).sort().reverse();
-    
-    let streak = 0;
-    let expectedDate = new Date();
-    expectedDate.setHours(0,0,0,0);
-
-    const latestDate = new Date(uniqueDates[0]);
-    latestDate.setHours(0,0,0,0);
-    const diffTime = expectedDate - latestDate;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays > 1) return 0;
-
-    for (let i = 0; i < uniqueDates.length; i++) {
-        const d = new Date(uniqueDates[i]);
-        d.setHours(0,0,0,0);
-        
-        const expectedStr = getLocalDateString(expectedDate);
-        const actualStr = getLocalDateString(d);
-
-        if (expectedStr === actualStr) {
-            streak++;
-            expectedDate.setDate(expectedDate.getDate() - 1);
-        } else if (i === 0 && diffDays === 1) {
-            streak++;
-            expectedDate = new Date(d);
-            expectedDate.setDate(expectedDate.getDate() - 1);
-        } else {
-            break;
-        }
-    }
-    return Math.max(1, streak);
-}
-
-function getEffectiveXP() {
-    const todayStr = getLocalDateString();
-    const todayMins = studyLogs.filter(l => l.date === todayStr).reduce((sum, l) => sum + l.minutes, 0);
-    return todayMins * 10;
-}
-
-function updateDashboard() {
-    const todayStr = getLocalDateString();
-    const todayMins = studyLogs.filter(l => l.date === todayStr).reduce((sum, l) => sum + l.minutes, 0);
-    const todayPomos = (todayMins / 25).toFixed(1);
-
-    const totalXP = getEffectiveXP();
-    
-    let currentRankObj = RANKS[0];
-    let nextRankObj = null;
-
-    for (let i = 0; i < RANKS.length; i++) {
-        if (totalXP >= RANKS[i].minXP) {
-            currentRankObj = RANKS[i];
-            nextRankObj = RANKS[i + 1] || null;
-        }
-    }
-
-    let levelProgress = 100;
-    if (nextRankObj) {
-        const xpInCurrentTier = totalXP - currentRankObj.minXP;
-        const xpRequiredForNext = nextRankObj.minXP - currentRankObj.minXP;
-        levelProgress = Math.min(100, Math.max(0, (xpInCurrentTier / xpRequiredForNext) * 100));
-    }
-
-    const streakDays = calculateStreak();
-
-    const statTotalXP = document.getElementById('statTotalXP');
-    if (statTotalXP) statTotalXP.textContent = `${totalXP.toLocaleString()} XP`;
-
-    const statTodayPomo = document.getElementById('statTodayPomo');
-    if (statTodayPomo) statTodayPomo.textContent = `${todayPomos} 🍅`;
-
-    const statStreakDays = document.getElementById('statStreakDays');
-    if (statStreakDays) statStreakDays.textContent = `${streakDays} 日`;
-
-    const statRankTitle = document.getElementById('statRankTitle');
-    if (statRankTitle) statRankTitle.textContent = `Rank ${currentRankObj.rank} ${currentRankObj.title}`;
-
-    const userLevelBadge = document.getElementById('userLevelBadge');
-    if (userLevelBadge) userLevelBadge.textContent = `Rank ${currentRankObj.rank}`;
-
-    const userRankTitle = document.getElementById('userRankTitle');
-    if (userRankTitle) userRankTitle.textContent = currentRankObj.title;
-
-    const xpProgressBar = document.getElementById('xpProgressBar');
-    if (xpProgressBar) xpProgressBar.style.width = `${levelProgress}%`;
-
-    const headerStreak = document.getElementById('headerStreak');
-    if (headerStreak) headerStreak.textContent = `${streakDays}日`;
-
-    const headerTodayPomo = document.getElementById('headerTodayPomo');
-    if (headerTodayPomo) headerTodayPomo.textContent = `${todayPomos} 🍅`;
-
-    renderLogsList();
-    updateCharts();
-}
-
-function openRankModal() {
-    const modal = document.getElementById('rankModal');
-    const container = document.getElementById('rankTableContainer');
-    if (!modal || !container) return;
-
-    const currentXP = getEffectiveXP();
-
-    container.innerHTML = '';
-    RANKS.forEach(r => {
-        const isReached = currentXP >= r.minXP;
-        const div = document.createElement('div');
-        div.className = `p-3 rounded-xl border flex items-center justify-between transition-all ${
-            isReached 
-                ? 'bg-amber-500/10 border-amber-500/40 text-amber-200' 
-                : 'bg-slate-900/50 border-slate-800 text-slate-500'
-        }`;
-        div.innerHTML = `
-            <div class="flex items-center gap-3">
-                <span class="w-10 h-7 rounded-md font-black text-xs flex items-center justify-center ${
-                    isReached ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'
-                }">${r.rank}</span>
-                <div>
-                    <div class="text-xs font-bold">${r.title}</div>
-                    <div class="text-[10px] opacity-75">${r.minXP.toLocaleString()} XP 必要</div>
-                </div>
-            </div>
-            ${isReached ? '<i class="fa-solid fa-circle-check text-amber-400 text-sm"></i>' : '<i class="fa-solid fa-lock text-slate-600 text-xs"></i>'}
-        `;
-        container.appendChild(div);
-    });
-
-    modal.classList.remove('hidden');
-}
-
-function closeRankModal() {
-    const modal = document.getElementById('rankModal');
-    if (modal) modal.classList.add('hidden');
-}
-
-function initCharts() {
-    const ctxBar = document.getElementById('barChart').getContext('2d');
-    barChartInstance = new Chart(ctxBar, {
-        type: 'bar',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'ポモ数 (25分)',
-                data: [],
-                backgroundColor: '#f59e0b',
-                borderRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-                y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } }, beginAtZero: true }
-            }
-        }
-    });
-
-    const ctxDoughnut = document.getElementById('doughnutChart').getContext('2d');
-    doughnutChartInstance = new Chart(ctxDoughnut, {
-        type: 'doughnut',
-        data: {
-            labels: ['算数', '国語', '理科', '社会', 'プログラミング', '自習', 'その他'],
-            datasets: [{
-                data: [0, 0, 0, 0, 0, 0, 0],
-                backgroundColor: ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#64748b'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'right', labels: { color: '#cbd5e1', font: { size: 10 }, boxWidth: 10 } }
-            }
-        }
-    });
-
-    const ctxHourly = document.getElementById('hourlyChart').getContext('2d');
-    hourlyChartInstance = new Chart(ctxHourly, {
-        type: 'line',
-        data: {
-            labels: Array.from({length: 24}, (_, i) => `${i}:00`),
-            datasets: [{
-                label: '学習時間 (分)',
-                data: new Array(24).fill(0),
-                borderColor: '#f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                fill: true,
-                tension: 0.3,
-                pointRadius: 3,
-                pointBackgroundColor: '#f59e0b'
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 9 }, maxTicksLimit: 12 } },
-                y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8', font: { size: 9 } }, beginAtZero: true }
-            }
-        }
-    });
-
-    updateCharts();
-}
-
-function updateCharts() {
-    if (!barChartInstance || !doughnutChartInstance || !hourlyChartInstance) return;
-
-    const labels = [];
-    const data = [];
-
-    if (activePeriod === 'weeks') {
-        for (let i = 7; i >= 0; i--) {
-            const start = new Date();
-            start.setDate(start.getDate() - (i * 7 + start.getDay()));
-            const end = new Date(start);
-            end.setDate(end.getDate() + 6);
-
-            const startStr = `${start.getMonth()+1}/${start.getDate()}`;
-            labels.push(`${startStr}~`);
-
-            const weekMins = studyLogs.filter(l => {
-                const d = new Date(l.date);
-                return d >= start && d <= end;
-            }).reduce((sum, l) => sum + l.minutes, 0);
-
-            if (activeUnit === 'pomo') {
-                data.push(parseFloat((weekMins / 25).toFixed(1)));
-            } else if (activeUnit === 'xp') {
-                data.push(weekMins * 10);
-            } else {
-                data.push(weekMins);
-            }
-        }
-    } else {
-        const daysCount = activePeriod === '7days' ? 7 : 30;
-        for (let i = daysCount - 1; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const dateStr = getLocalDateString(d);
-            labels.push(`${d.getMonth()+1}/${d.getDate()}`);
-
-            const dayMins = studyLogs.filter(l => l.date === dateStr).reduce((sum, l) => sum + l.minutes, 0);
-
-            if (activeUnit === 'pomo') {
-                data.push(parseFloat((dayMins / 25).toFixed(1)));
-            } else if (activeUnit === 'xp') {
-                data.push(dayMins * 10);
-            } else {
-                data.push(dayMins);
-            }
-        }
-    }
-
-    barChartInstance.data.labels = labels;
-    barChartInstance.data.datasets[0].data = data;
-
-    if (activeUnit === 'pomo') {
-        barChartInstance.data.datasets[0].label = 'ポモ数 (25分)';
-        barChartInstance.data.datasets[0].backgroundColor = '#f59e0b';
-    } else if (activeUnit === 'xp') {
-        barChartInstance.data.datasets[0].label = '獲得 XP';
-        barChartInstance.data.datasets[0].backgroundColor = '#10b981';
-    } else {
-        barChartInstance.data.datasets[0].label = '学習時間 (分)';
-        barChartInstance.data.datasets[0].backgroundColor = '#6366f1';
-    }
-    barChartInstance.update();
-
-    const subjects = ['算数', '国語', '理科', '社会', 'プログラミング', '自習', 'その他'];
-    const subjectData = subjects.map(s => {
-        return studyLogs.filter(l => l.subject === s).reduce((sum, l) => sum + l.minutes, 0);
-    });
-    doughnutChartInstance.data.datasets[0].data = subjectData;
-    doughnutChartInstance.update();
-
-    const hourlyData = new Array(24).fill(0);
-    studyLogs.forEach(log => {
-        if (log.time) {
-            const hour = parseInt(log.time.split(':')[0], 10);
-            if (!isNaN(hour) && hour >= 0 && hour < 24) {
-                hourlyData[hour] += log.minutes;
-            }
-        }
-    });
-    hourlyChartInstance.data.datasets[0].data = hourlyData;
-    hourlyChartInstance.update();
-
-    const maxMins = Math.max(...hourlyData);
-    const goldenTimeEl = document.getElementById('goldenTimeAdvice');
-    if (goldenTimeEl) {
-        if (maxMins > 0) {
-            const peakHour = hourlyData.indexOf(maxMins);
-            goldenTimeEl.textContent = `🔥 あなたの無敵タイム: ${peakHour}:00 ~ ${peakHour+1}:00`;
-        } else {
-            goldenTimeEl.textContent = 'データ蓄積中...';
-        }
-    }
-}
-
-function switchChartUnit(unit) {
-    activeUnit = unit;
-    const btnPomo = document.getElementById('btnUnitPomo');
-    const btnMins = document.getElementById('btnUnitMins');
-    const btnXP = document.getElementById('btnUnitXP');
-
-    [btnPomo, btnMins, btnXP].forEach(b => {
-        if (b) b.className = 'px-2 py-0.5 rounded-md text-slate-400 hover:text-white';
-    });
-
-    if (unit === 'pomo' && btnPomo) btnPomo.className = 'px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-bold';
-    if (unit === 'mins' && btnMins) btnMins.className = 'px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold';
-    if (unit === 'xp' && btnXP) btnXP.className = 'px-2 py-0.5 rounded-md bg-emerald-500 text-slate-950 font-bold';
-
-    updateCharts();
-}
-
-function switchChartPeriod(period) {
-    activePeriod = period;
-    const btn7 = document.getElementById('btnPeriod7');
-    const btn30 = document.getElementById('btnPeriod30');
-    const btnWeeks = document.getElementById('btnPeriodWeeks');
-
-    [btn7, btn30, btnWeeks].forEach(b => {
-        if (b) b.className = 'px-2 py-0.5 rounded-md text-slate-400 hover:text-white';
-    });
-
-    if (period === '7days' && btn7) btn7.className = 'px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold';
-    if (period === '30days' && btn30) btn30.className = 'px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold';
-    if (period === 'weeks' && btnWeeks) btnWeeks.className = 'px-2 py-0.5 rounded-md bg-indigo-600 text-white font-bold';
-
-    updateCharts();
-}
-
-function renderLogsList() {
-    const container = document.getElementById('logListContainer');
-    if (!container) return;
-
-    container.innerHTML = '';
-    if (studyLogs.length === 0) {
-        container.innerHTML = '<div class="text-center text-xs text-slate-500 py-4">学習ログがまだありません</div>';
-        return;
-    }
-
-    studyLogs.slice(0, 20).forEach(log => {
-        const div = document.createElement('div');
-        div.className = 'bg-slate-900/60 border border-slate-700/50 rounded-xl p-2.5 flex items-center justify-between text-xs';
-        div.innerHTML = `
-            <div class="flex items-center gap-2.5">
-                <span class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center text-xs border border-indigo-500/30">🍅</span>
-                <div>
-                    <div class="font-bold text-slate-200">${log.subject} <span class="text-slate-400 font-normal">(${log.minutes}分)</span></div>
-                    <div class="text-[10px] text-slate-400">${log.date} ${log.time || ''}</div>
-                </div>
-            </div>
-            <span class="text-xs font-mono font-extrabold text-amber-400">+${log.minutes * 10} XP</span>
-        `;
-        container.appendChild(div);
-    });
-}
-
-function generateSampleData() {
-    const subjects = ['算数', '国語', '理科', '社会', 'プログラミング', '自習'];
-    for (let i = 0; i < 5; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        studyLogs.push({
-            id: Date.now() + i,
-            date: getLocalDateString(d),
-            time: '20:00',
-            subject: subjects[Math.floor(Math.random() * subjects.length)],
-            minutes: 25
+        log(`解析成功: 【${p1.meta.school}】${p1.meta.year}年 ${p1.meta.subject} (生徒ID: ${p1.meta.student_id})`);
+        showStatus('画像を横結合中...', 60, 'A4 2枚を A3/B4 結合画像へ整形しています');
+
+        // Canvas合成 (A4 x 2 -> B4/A3)
+        const combinedBlob = await createCombinedBlob(p1.img, p2.img);
+
+        showStatus('Supabaseへ登録中...', 85, 'StorageへのアップロードとDBのインサートを行っています');
+
+        // Supabaseへ送信
+        const meta = p1.meta;
+        const timestamp = Date.now();
+        const filePath = `${meta.school}/${meta.year}/${meta.subject}/${meta.student_id}_${timestamp}.png`;
+
+        // ① Storage Upload
+        const { data: storageData, error: storageError } = await supabase.storage
+          .from('answers')
+          .upload(filePath, combinedBlob, { contentType: 'image/png' });
+
+        if (storageError) throw storageError;
+
+        // ② Public URL 取得
+        const { data: urlData } = supabase.storage.from('answers').getPublicUrl(filePath);
+
+        // ③ DB Insert
+        const { error: dbError } = await supabase.from('answers').insert({
+          school: meta.school,
+          year: parseInt(meta.year),
+          subject: meta.subject,
+          student_id: meta.student_id,
+          image_url: urlData.publicUrl,
+          status: 'ungraded'
         });
+
+        if (dbError) throw dbError;
+
+        showStatus('完了しました！', 100, `登録が正常完了しました。\nStorageパス: ${filePath}\n採点システムへ即時反映されます。`, false);
+
+      } catch (err) {
+        console.error(err);
+        showStatus('エラーが発生しました', 0, `[ERROR] ${err.message}`, false, true);
+      } finally {
+        fileInput.value = '';
+      }
     }
-    saveSettingsAndItemsToCloud();
-    updateDashboard();
-}
-</script>
+
+    // --- 3. 補助関数群 ---
+
+    // PDF ➔ Image 化 (PDF.js)
+    async function extractImagesFromPdf(file) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const images = [];
+
+      for (let i = 1; i <= Math.min(2, pdf.numPages); i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 }); // 高画質スキャン用にスケール2倍
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+        
+        const img = new Image();
+        img.src = canvas.toDataURL('image/png');
+        await new Promise(r => img.onload = r);
+        images.push(img);
+      }
+      return images;
+    }
+
+    function loadImageFile(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    // QRの解析および180度回転自動補正
+    async function parseAndOrientImage(img) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let code = jsQR(imageData.data, imageData.width, imageData.height);
+
+      // 正位置で見つからなかった場合、180度回転させて再判定
+      let isRotated = false;
+      if (!code) {
+        ctx.translate(canvas.width, canvas.height);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(img, 0, 0);
+        imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        code = jsQR(imageData.data, imageData.width, imageData.height);
+        isRotated = true;
+      }
+
+      if (!code) {
+        throw new Error('画像からQRコードが読み取れませんでした。');
+      }
+
+      // QRの中身(JSON)をパース
+      // 例: {"school":"kaisei","year":2024,"subject":"math","student_id":"S123","page":"P1"}
+      let meta = {};
+      try {
+        meta = JSON.parse(code.data);
+      } catch (e) {
+        throw new Error(`QRコードのデータフォーマットが不正です: ${code.data}`);
+      }
+
+      // 補正済みImgを作成
+      const finalImg = new Image();
+      finalImg.src = canvas.toDataURL('image/png');
+      await new Promise(r => finalImg.onload = r);
+
+      return { img: finalImg, meta: meta };
+    }
+
+    // P1とP2をCanvasで横に結合 (A4x2 -> A3/B4)
+    function createCombinedBlob(imgP1, imgP2) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = imgP1.width + imgP2.width;
+        canvas.height = Math.max(imgP1.height, imgP2.height);
+
+        const ctx = canvas.getContext('2d');
+        // 背景を白で塗る
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 左にP1、右にP2を描画
+        ctx.drawImage(imgP1, 0, 0);
+        ctx.drawImage(imgP2, imgP1.width, 0);
+
+        canvas.toBlob((blob) => resolve(blob), 'image/png');
+      });
+    }
+
+    // UI更新補助
+    function showStatus(title, percent, logText, isSpinning = true, isError = false) {
+      statusCard.classList.remove('hidden');
+      statusTitle.textContent = title;
+      statusTitle.className = `text-sm font-bold ${isError ? 'text-rose-400' : 'text-slate-200'}`;
+      progressBar.style.width = `${percent}%`;
+      progressBar.className = `h-full transition-all duration-300 ${isError ? 'bg-rose-500' : 'bg-emerald-500'}`;
+      statusSpinner.style.display = isSpinning ? 'inline-block' : 'none';
+      if (logText) log(logText);
+    }
+
+    function log(text) {
+      statusLog.textContent += `${text}\n`;
+    }
+  </script>
 </body>
 </html>
